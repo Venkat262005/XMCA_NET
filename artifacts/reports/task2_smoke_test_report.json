@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-11-03T19:49:30Z",
+  "dry_run": true,
+  "system_info": {
+    "platform": "macOS-26.7-arm64-arm-64bit",
+    "python_version": "3.11.9",
+    "is_kaggle": false
+  },
+  "gpu_environment": {
+    "valid": false,
+    "details": "PyTorch is not installed in the environment."
+  },
+  "infoseek_guard_passed": true,
+  "partition_isolation_passed": true,
+  "models": {
+    "llava": {
+      "status": "dry_run_validated",
+      "model_id": "llava-hf/llava-1.5-7b-hf",
+      "revision": "a272c74",
+      "family": "LLaVA",
+      "device_map": "auto",
+      "smoke_outputs": []
+    },
+    "qwen2_vl": {
+      "status": "dry_run_validated",
+      "model_id": "Qwen/Qwen2-VL-7B-Instruct",
+      "revision": "847be15",
+      "family": "Qwen2-VL",
+      "device_map": "auto",
+      "smoke_outputs": []
+    },
+    "internvl": {
+      "status": "dry_run_validated",
+      "model_id": "OpenGVLab/InternVL2-2B",
+      "revision": "cc06eec",
+      "family": "InternVL",
+      "device_map": "auto",
+      "smoke_outputs": []
+    }
+  }
+}

@@ -41,3 +41,4 @@ $$\mathcal{C}_{\text{POPE}} = \mathcal{S}_{\text{adv}} (334) \cup \mathcal{S}_{\
 - **Stratified Sample IDs**: `pope_adversarial_{qid}`, `pope_popular_{qid}`, `pope_random_{qid}`.
 - **Image Association**: All probes map directly to MSCOCO 2014 Validation imagery (`COCO_val2014_...jpg`).
 - **Cryptographic Hashes**: Every probe retains `source_record_hash = sha256(canonical_json(raw_record + strategy))` guaranteeing 100% collision-free traceability back to upstream JSON files.
+

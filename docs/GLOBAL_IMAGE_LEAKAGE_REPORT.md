@@ -68,3 +68,4 @@ Columns:
    $$\texttt{eligible\_for\_combiner\_training} = \text{False}$$
 3. **Combiner Training Guarantee**: In Task 8, the calibrated XMCA combiner will be trained strictly on images with $\texttt{eligible\_for\_combiner\_training} = \text{True}$. This guarantees that zero test images ever enter combiner parameter optimization or threshold calibration.
 4. **Preservation of Official Splits**: Zero records were modified, re-split, or reassigned across benchmarks.
+

@@ -64,3 +64,4 @@ Because the 174 unique human evaluations originate from 30 physical images:
 1. **Clustered Observations**: Evaluations on the same image share identical visual features and perceptual grounding.
 2. **Variance Estimation**: All downstream confidence intervals and error bars on FaithScore must utilize **cluster-robust standard errors** grouped by `global_image_id` rather than treating all 174 rows as independent and identically distributed (i.i.d.) observations.
 3. **Cohort Representation**: The candidate cohort manifest (`artifacts/manifests/cohort_manifest.parquet`) maintains all 174 unique evaluations with explicit image grouping keys.
+

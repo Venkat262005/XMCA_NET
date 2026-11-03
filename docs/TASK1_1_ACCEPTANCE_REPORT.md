@@ -90,3 +90,4 @@ In accordance with user instructions, Task 1.1 development stops here:
 - **Zero synthetic samples or fake proxies created**
 
 The dataset reconciliation and provenance foundation is complete. Awaiting user authorization to begin **Task 2: VLM Adapter Implementation & Real T4 × 2 Smoke Tests**.
+

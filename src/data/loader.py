@@ -8,7 +8,7 @@ import os
 import json
 import hashlib
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 
 
@@ -204,6 +204,48 @@ class AuthenticDatasetLoader:
             "a_okvqa": self.load_aokvqa(),
             "infoseek": self.load_infoseek(),
         }
+
+
+def verify_partition_isolation(
+    global_image_ids: List[str],
+    partition_type: str,
+    group_manifest_path: Optional[Path] = None,
+) -> Tuple[bool, List[str]]:
+    """Assert that none of the requested images violate cross-partition isolation.
+
+    Barred partitions include:
+      - 'combiner_training'
+      - 'calibration'
+      - 'threshold_selection'
+      - 'early_stopping'
+      - 'model_selection'
+
+    Returns:
+        (is_valid, list_of_violating_image_ids)
+    """
+    import pandas as pd
+
+    path = group_manifest_path or Path("artifacts/manifests/global_image_group_manifest.parquet")
+    if not path.exists():
+        raise FileNotFoundError(f"Global image group manifest not found: {path}")
+
+    df = pd.read_parquet(path)
+    col_map = {
+        "combiner_training": "eligible_for_combiner_training",
+        "training": "eligible_for_combiner_training",
+        "calibration": "eligible_for_calibration",
+        "threshold_selection": "eligible_for_threshold_selection",
+        "early_stopping": "eligible_for_early_stopping",
+        "model_selection": "eligible_for_model_selection",
+    }
+    col = col_map.get(partition_type)
+    if not col:
+        raise ValueError(f"Unknown partition_type '{partition_type}'. Valid: {list(col_map.keys())}")
+
+    # Index by global_image_id
+    ineligible_set = set(df[df[col] == False]["global_image_id"].tolist())
+    violations = [img_id for img_id in global_image_ids if img_id in ineligible_set]
+    return len(violations) == 0, violations
 
 
 # Backwards compatibility alias

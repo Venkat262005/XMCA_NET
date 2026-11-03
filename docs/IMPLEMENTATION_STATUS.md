@@ -9,9 +9,9 @@ This document provides a transparent, authoritative status of all research compo
 | Task ID | Task Description | Status | Target Environment | Deliverables |
 |---|---|---|---|---|
 | **Task 0** | Build repository foundation from zero | **COMPLETED** | Local Workspace / Sandbox | Configs, schemas, tests, docs, bootstrap notebook, git commit |
-| **Task 1** | Dataset acquisition, checksum verification & tier sampling | **PENDING** | Local & Remote | Raw data download scripts, sha256 manifests for 100/300/600/1000 tiers |
-| **Task 2** | Kaggle dual-T4 bootstrap verification | **PENDING** | Kaggle Dual T4 | Executed `XMCA_BOOTSTRAP_KAGGLE.ipynb` & persisted hardware verification report |
-| **Task 3** | VLM generation pipeline (LLaVA, Qwen2-VL, InternVL) | **PENDING** | Kaggle Dual T4 | Generation scripts, matched ID outputs across 4 tiers |
+| **Task 1 & 1.1** | Authentic dataset acquisition, provenance & leakage reconciliation | **COMPLETED** | Local Workspace / Sandbox | 3,174 frozen records (POPE tri-strategy, FaithScore human, A-OKVQA, InfoSeek), global image group manifest, storage audit, 39 passing tests |
+| **Task 2** | VLM Adapters & Kaggle Dual-T4 Smoke Test | **COMPLETED** | Kaggle Dual T4 / Local Contracts | Unified `BaseVLMAdapter`, LLaVA, Qwen2-VL, InternVL adapters, dynamic patching, multi-GPU mapping, InfoSeek & leakage guards, 52 passing tests, smoke notebook & script |
+| **Task 3** | Benchmark VLM generation pipeline across 3 models | **PENDING** | Kaggle Dual T4 | Generation runs, 9,522 outputs across verified cohorts, matched ID manifests |
 | **Task 4** | Consistency diagnostics ($S_P, S_R, S_U$) | **PENDING** | Kaggle Dual T4 | Feature extractors, cross-attention grounding, knowledge verification |
 | **Task 5** | Calibrated detection combiner & attribution head | **PENDING** | Kaggle Dual T4 | Calibrated combiner, supervised attribution head on POPE & FaithScore |
 | **Task 6** | Baseline implementations & comparative benchmark | **PENDING** | Kaggle Dual T4 | Comparative evaluations (AUROC, PR-AUC, ECE, Attribution Acc) |
@@ -27,8 +27,11 @@ This document provides a transparent, authoritative status of all research compo
 | `src.utils.environment` | `src/utils/environment.py` | **ACTIVE** | Enforces Kaggle dual-T4 requirement and blocks local inference |
 | `src.utils.manifest` | `src/utils/manifest.py` | **ACTIVE** | Validates matched evaluation sample IDs across models |
 | `src.data.schema` | `src/data/schema.py` | **ACTIVE** | Strict schemas for POPE, FaithScore, A-OKVQA, InfoSeek |
-| `src.data.loader` | `src/data/loader.py` | **PENDING** | Pending Task 1; raises `FileNotFoundError` / `NotImplementedError` |
-| `src.generation` | `src/generation/generator.py` | **PENDING** | Pending Task 3; strictly blocked on local Mac |
+| `src.data.loader` | `src/data/loader.py` | **ACTIVE** | Authentic loaders for POPE tri-strategy, FaithScore 174 human annotations, A-OKVQA, InfoSeek |
+| `src.generation.base` | `src/generation/base.py` | **ACTIVE** | Abstract `BaseVLMAdapter` and standardized `VLMGenerationOutput` schema |
+| `src.generation.adapters` | `src/generation/adapters/` | **ACTIVE** | LLaVA, Qwen2-VL, and InternVL adapters with dynamic patching and dual-T4 device maps |
+| `src.generation.registry` | `src/generation/registry.py` | **ACTIVE** | Factory registry mapping canonical keys with revision verification |
+| `src.generation.generator` | `src/generation/generator.py` | **ACTIVE** | Orchestrator with InfoSeek un-materialized image safeguard |
 | `src.perception` | `src/perception/consistency.py` | **PENDING** | Pending Task 4; placeholder scores strictly prohibited |
 | `src.retrieval` | `src/retrieval/consistency.py` | **PENDING** | Pending Task 4; placeholder scores strictly prohibited |
 | `src.utilization` | `src/utilization/consistency.py` | **PENDING** | Pending Task 4; placeholder scores strictly prohibited |

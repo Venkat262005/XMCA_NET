@@ -253,10 +253,18 @@ def main():
 
         if has_test:
             combiner_partition = "held_out_test"
-            eligible_for_combiner_training = False
+            eligible_for_training = False
+            eligible_for_calibration = False
+            eligible_for_threshold_selection = False
+            eligible_for_early_stopping = False
+            eligible_for_model_selection = False
         else:
             combiner_partition = "validation"
-            eligible_for_combiner_training = True
+            eligible_for_training = True
+            eligible_for_calibration = True
+            eligible_for_threshold_selection = True
+            eligible_for_early_stopping = True
+            eligible_for_model_selection = True
 
         if is_multi_dataset:
             test_overlaps += 1
@@ -270,7 +278,11 @@ def main():
             "question_count": len(data["sample_ids"]),
             "combiner_partition": combiner_partition,
             "split_conflict": has_split_conflict,
-            "eligible_for_combiner_training": eligible_for_combiner_training,
+            "eligible_for_combiner_training": eligible_for_training,
+            "eligible_for_calibration": eligible_for_calibration,
+            "eligible_for_threshold_selection": eligible_for_threshold_selection,
+            "eligible_for_early_stopping": eligible_for_early_stopping,
+            "eligible_for_model_selection": eligible_for_model_selection,
         })
         group_idx += 1
 

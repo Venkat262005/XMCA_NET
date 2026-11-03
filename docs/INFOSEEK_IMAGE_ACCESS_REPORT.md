@@ -51,3 +51,4 @@ The 25 candidate preflight records (`oven_04990048`, `oven_04962816`, `oven_0496
 - Verified entity target questions and Wikidata ground-truth answer aliases.
 - Explicit download status in `artifacts/manifests/image_manifest.parquet`.
 - Ready for authenticated execution on Kaggle Dual T4 upon credential binding.
+
