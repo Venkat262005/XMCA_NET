@@ -103,6 +103,7 @@ class ModelItemConfig(BaseModel):
     role: Optional[str] = "adapter_validation"
     model_id: str
     revision: Optional[str] = None
+    resolved_full_sha: Optional[str] = None
     architecture: str
     dtype: str = "float16"
     device_map: str = "auto"

@@ -49,13 +49,13 @@ def test_adapter_instantiation():
     qwen = get_adapter("qwen2_vl", models_cfg, app_cfg)
     assert isinstance(qwen, Qwen2VLAdapter)
     assert qwen.model_id == "Qwen/Qwen2-VL-7B-Instruct"
-    assert qwen.revision == "847be15"
+    assert qwen.revision == "eed13092ef92e448dd6875b2a00151bd3f7db0ac"
     assert not qwen.is_loaded
 
     internvl = get_adapter("internvl", models_cfg, app_cfg)
     assert isinstance(internvl, InternVLAdapter)
     assert internvl.model_id == "OpenGVLab/InternVL2-2B"
-    assert internvl.revision == "cc06eec"
+    assert internvl.revision == "e4f6747bd20f139e637642c6a058c6bd00b36919"
     assert not internvl.is_loaded
 
 

@@ -42,6 +42,37 @@ def query_nvidia_smi() -> List[Dict[str, Any]]:
         return [{"error": str(e)}]
 
 
+def get_parameter_distribution(model: Any) -> Dict[str, Any]:
+    """Calculate parameter count and percentage allocated per hardware device."""
+    if model is None:
+        return {}
+
+    param_counts: Dict[str, int] = {}
+    try:
+        for _, param in model.named_parameters():
+            dev = str(param.device)
+            param_counts[dev] = param_counts.get(dev, 0) + param.numel()
+        total = sum(param_counts.values())
+        return {
+            dev: {
+                "param_count": count,
+                "percentage": round(count / total * 100, 2) if total > 0 else 0.0,
+            }
+            for dev, count in param_counts.items()
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_tensor_device_placement(tensors_dict: Dict[str, Any]) -> Dict[str, str]:
+    """Inspect and report physical accelerator device for all input tensors."""
+    placement = {}
+    for k, v in tensors_dict.items():
+        if hasattr(v, "device"):
+            placement[k] = str(v.device)
+    return placement
+
+
 def get_cuda_memory_snapshot() -> Dict[str, Dict[str, float]]:
     """Capture detailed PyTorch CUDA memory metrics per active device."""
     try:
@@ -122,3 +153,4 @@ class ModelMemoryTelemetry:
             "during_generation_peak": self.during_generation_peak,
             "after_unload": self.after_unload,
         }
+

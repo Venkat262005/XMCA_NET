@@ -3,7 +3,8 @@ models:
     family: "LLaVA"
     role: "adapter_validation"
     model_id: "llava-hf/llava-1.5-7b-hf"
-    revision: "a272c74" # Explicit git commit SHA required under strict mode
+    revision: "a272c74" # Resolved full SHA: a272c74b2481d8aff3aa6fc2c4bf891fe57334fb
+    resolved_full_sha: "a272c74b2481d8aff3aa6fc2c4bf891fe57334fb"
     architecture: "LlavaForConditionalGeneration"
     dtype: "float16"
     device_map: "auto"
@@ -19,7 +20,8 @@ models:
     family: "Qwen2-VL"
     role: "adapter_validation"
     model_id: "Qwen/Qwen2-VL-7B-Instruct"
-    revision: "847be15" # Explicit git commit SHA required under strict mode
+    revision: "eed13092ef92e448dd6875b2a00151bd3f7db0ac"
+    resolved_full_sha: "eed13092ef92e448dd6875b2a00151bd3f7db0ac"
     architecture: "Qwen2VLForConditionalGeneration"
     dtype: "float16"
     device_map: "auto"
@@ -35,7 +37,8 @@ models:
     family: "InternVL"
     role: "adapter_validation"
     model_id: "OpenGVLab/InternVL2-2B"
-    revision: "cc06eec" # Pinned commit revision for InternVL2-2B adapter validation
+    revision: "e4f6747bd20f139e637642c6a058c6bd00b36919"
+    resolved_full_sha: "e4f6747bd20f139e637642c6a058c6bd00b36919"
     architecture: "InternVLChatModel"
     dtype: "float16"
     device_map: "auto"
@@ -49,6 +52,7 @@ models:
     alternative_scale_test:
       role: "scale_experiment"
       model_id: "OpenGVLab/InternVL2-8B"
-      revision: "9826f68"
+      revision: "6fb9ad6924f69424e57fab2ab061d707688f0296"
+      resolved_full_sha: "6fb9ad6924f69424e57fab2ab061d707688f0296"
       notes: "Requires custom multi-GPU split (explicit device map) due to ~16GB weights"
 

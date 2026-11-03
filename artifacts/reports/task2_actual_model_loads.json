@@ -1,0 +1,68 @@
+{
+  "llava": {
+    "status": "DRY_RUN_CONTRACT_VALIDATED",
+    "model_id": "llava-hf/llava-1.5-7b-hf",
+    "configured_revision": "a272c74",
+    "resolved_full_sha": "a272c74b2481d8aff3aa6fc2c4bf891fe57334fb",
+    "role": "adapter_validation",
+    "precision": "float16",
+    "device_map": "auto",
+    "hf_device_map": {
+      "model": "cuda:0",
+      "lm_head": "cuda:1"
+    },
+    "parameter_distribution": {
+      "cuda:0": {
+        "percentage": 50.0
+      },
+      "cuda:1": {
+        "percentage": 50.0
+      }
+    },
+    "load_duration_sec": 0.0
+  },
+  "qwen2_vl": {
+    "status": "DRY_RUN_CONTRACT_VALIDATED",
+    "model_id": "Qwen/Qwen2-VL-7B-Instruct",
+    "configured_revision": "eed13092ef92e448dd6875b2a00151bd3f7db0ac",
+    "resolved_full_sha": "eed13092ef92e448dd6875b2a00151bd3f7db0ac",
+    "role": "adapter_validation",
+    "precision": "float16",
+    "device_map": "auto",
+    "hf_device_map": {
+      "model": "cuda:0",
+      "lm_head": "cuda:1"
+    },
+    "parameter_distribution": {
+      "cuda:0": {
+        "percentage": 50.0
+      },
+      "cuda:1": {
+        "percentage": 50.0
+      }
+    },
+    "load_duration_sec": 0.0
+  },
+  "internvl": {
+    "status": "DRY_RUN_CONTRACT_VALIDATED",
+    "model_id": "OpenGVLab/InternVL2-2B",
+    "configured_revision": "e4f6747bd20f139e637642c6a058c6bd00b36919",
+    "resolved_full_sha": "e4f6747bd20f139e637642c6a058c6bd00b36919",
+    "role": "adapter_validation",
+    "precision": "float16",
+    "device_map": "auto",
+    "hf_device_map": {
+      "model": "cuda:0",
+      "lm_head": "cuda:1"
+    },
+    "parameter_distribution": {
+      "cuda:0": {
+        "percentage": 50.0
+      },
+      "cuda:1": {
+        "percentage": 50.0
+      }
+    },
+    "load_duration_sec": 0.0
+  }
+}

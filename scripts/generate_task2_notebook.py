@@ -1,4 +1,4 @@
-"""Generate notebooks/XMCA_TASK2_VLM_SMOKE_TEST.ipynb for Task 2.1."""
+"""Generate notebooks/XMCA_TASK2_VLM_SMOKE_TEST.ipynb for Task 2.1 Final Execution."""
 
 import json
 from pathlib import Path
@@ -23,31 +23,29 @@ def create_task2_notebook():
             "source": source.strip().splitlines(keepends=True),
         }
 
-    # Title & Overview
-    cells.append(md_cell("""# XMCA-Net — Task 2.1: Real Dual-T4 Generation Verification
+    # Header
+    cells.append(md_cell("""# XMCA-Net — Task 2.1: Final Dual-T4 Generation Verification
 
-**Target Hardware**: Kaggle NVIDIA T4 x 2 (Accelerator: GPU T4 x 2)  
+**Target Accelerator**: Kaggle Dual NVIDIA T4 (2 × 16GB VRAM)  
 **Strict Research Protocol**:
-- 6 Identical authentic probes across all 3 VLMs:
-  - POPE: 1 yes-labelled (`pope_adversarial_103`) & 1 no-labelled (`pope_adversarial_104`)
-  - FaithScore: 2 distinct authentic images (`000000525439` & `000000097131`)
-  - A-OKVQA: 2 authentic questions (`3X8TsFBRS7mBsBbyFDzRdb` & `4cdYbJFFeKXJr6LbKgcxTa`)
+- 6 Identical authentic probes across 3 backbones (18 genuine records total):
+  - POPE: `pope_adversarial_103` (yes) and `pope_adversarial_104` (no)
+  - FaithScore: `000000525439` (Image 1) and `000000097131` (Image 2)
+  - A-OKVQA: `3X8TsFBRS7mBsBbyFDzRdb` (Q1) and `4cdYbJFFeKXJr6LbKgcxTa` (Q2)
   - InfoSeek: Verified blocked from image-conditioned inference until OVEN access
 - 3 Explicitly declared adapter-validation models:
-  - `llava-hf/llava-1.5-7b-hf` (rev `a272c74`)
-  - `Qwen/Qwen2-VL-7B-Instruct` (rev `847be15`)
-  - `OpenGVLab/InternVL2-2B` (rev `cc06eec`, with 8B split validation)
-- Comprehensive GPU memory telemetry:
-  - `memory_allocated`, `memory_reserved`, peak watermarks, and driver `nvidia-smi` usage
-- Deliverables:
-  - `artifacts/generations/task2_verified/`
-  - `artifacts/reports/task2_actual_gpu_execution.json`
-  - `artifacts/reports/task2_model_load_report.json`
-  - `artifacts/reports/task2_memory_telemetry.json`
-  - `artifacts/reports/task2_generation_outputs.jsonl`
-  - `artifacts/reports/task2_acceptance_report.json`"""))
+  - `llava-hf/llava-1.5-7b-hf` (rev `a272c74` / full SHA `a272c74b...`)
+  - `Qwen/Qwen2-VL-7B-Instruct` (rev `eed13092...`)
+  - `OpenGVLab/InternVL2-2B` (rev `e4f6747b...`)
+  - Optional scale test: `OpenGVLab/InternVL2-8B` (rev `6fb9ad69...`) with custom layer mapping
+- Outputs:
+  - `artifacts/generations/task2_verified/llava.jsonl`
+  - `artifacts/generations/task2_verified/qwen2_vl.jsonl`
+  - `artifacts/generations/task2_verified/internvl2.jsonl`
+  - 6 Reports in `artifacts/reports/`"""))
 
-    # Cell 1: Environment & GPU Verification
+    # Cell 1: Hardware Validation
+    cells.append(md_cell("## 1. Hardware Environment & GPU Verification"))
     cells.append(code_cell("""import os
 import sys
 import gc
@@ -63,7 +61,7 @@ print(f"PyTorch Version: {torch.__version__}")
 print(f"CUDA Available: {torch.cuda.is_available()}")
 
 if not torch.cuda.is_available():
-    raise RuntimeError("CUDA accelerator is strictly required. Ensure Kaggle setting is 'GPU T4 x 2'.")
+    raise RuntimeError("CUDA accelerator is strictly required. Set Kaggle Accelerator to GPU T4 x 2.")
 
 device_count = torch.cuda.device_count()
 print(f"Detected GPU Count: {device_count}")
@@ -75,13 +73,14 @@ for i in range(device_count):
         print(f"  Warning: Accelerator '{dev_name}' is not an NVIDIA T4.")
 
 if device_count < 2:
-    raise RuntimeError(f"Expected at least 2 NVIDIA T4 GPUs for dual-T4 execution, found {device_count}.")"""))
+    raise RuntimeError(f"Strict requirement: Expected 2 NVIDIA T4 GPUs for dual-T4 execution, found {device_count}.")"""))
 
     # Cell 2: Dependencies
-    cells.append(code_cell('''# Ensure required packages are present
-!pip install -q "transformers>=4.45.0" "accelerate>=0.30.0" "timm>=0.9.12" "einops>=0.7.0"'''))
+    cells.append(md_cell("## 2. Environment Dependencies & Kaggle Secrets"))
+    cells.append(code_cell('''# Install required packages
+!pip install -q "transformers>=4.45.0" "accelerate>=0.30.0" "timm>=0.9.12" "einops>=0.7.0" "bitsandbytes>=0.43.0"'''))
 
-    # Cell 3: Kaggle Secrets
+    # Cell 3: Secrets
     cells.append(code_cell("""try:
     from kaggle_secrets import UserSecretsClient
     user_secrets = UserSecretsClient()
@@ -89,9 +88,10 @@ if device_count < 2:
     os.environ["HF_TOKEN"] = hf_token
     print("✓ Kaggle Secrets: HF_TOKEN detected and configured.")
 except Exception as e:
-    print(f"Notice: Kaggle Secrets HF_TOKEN not found ({e}). OVEN access remains gated until configured.")"""))
+    print(f"Notice: Kaggle Secrets HF_TOKEN not found ({e}). OVEN access remains gated.")"""))
 
     # Cell 4: Repository Setup
+    cells.append(md_cell("## 3. Codebase Setup & Telemetry Verification"))
     cells.append(code_cell("""repo_root = Path.cwd()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
@@ -102,6 +102,8 @@ from src.generation.telemetry import (
     query_nvidia_smi,
     get_cuda_memory_snapshot,
     reset_peak_memory_stats,
+    get_parameter_distribution,
+    get_tensor_device_placement,
     ModelMemoryTelemetry,
 )
 from src.data.loader import verify_partition_isolation
@@ -111,11 +113,13 @@ app_config = load_app_config()
 models_config = load_models_config()
 
 print(f"Available Adapters: {list_available_adapters()}")
-print(f"Initial nvidia-smi: {query_nvidia_smi()}")"""))
+print("Initial Hardware Telemetry:")
+for gpu in query_nvidia_smi():
+    print(f"  GPU {gpu.get('gpu_index')}: {gpu.get('name')} | Used: {gpu.get('memory_used_gib')} GiB / {gpu.get('memory_total_gib')} GiB")"""))
 
-    # Cell 5: Safeguard Verifications
+    # Cell 5: Safeguard Verification
+    cells.append(md_cell("## 4. Preflight Integrity & Safeguard Verification"))
     cells.append(code_cell("""# 1. InfoSeek Gating Safeguard
-infoseek_sample_blocked = False
 try:
     orchestrator = GenerationOrchestrator(app_config, models_config)
     orchestrator.run_inference_sample(
@@ -123,39 +127,50 @@ try:
         sample_id="infoseek_val_00004278",
         dataset="infoseek",
         question="What is this object?",
-        image_path="data/images/infoseek/unmaterialized.jpg",
+        image_path=Path("data/images/infoseek/unmaterialized.jpg"),
     )
 except RuntimeError as e:
     if "InfoSeek image-conditioned inference is BLOCKED" in str(e):
-        infoseek_sample_blocked = True
-        print("✓ InfoSeek safeguard PASS: Un-materialized image access strictly blocked.")
+        print("✓ InfoSeek safeguard PASS: Gated OVEN access strictly blocked.")
     else:
         raise e
 
 # 2. Cross-Partition Leakage Isolation Check
 is_isolated, violations = verify_partition_isolation(["coco_000000506483"], "calibration")
 if not is_isolated and "coco_000000506483" in violations:
-    print("✓ Global Image Group Isolation PASS: Overlapping test images strictly excluded from calibration.")
+    print("✓ Global Image Group Isolation PASS: Overlapping test images excluded from calibration.")
 else:
-    raise RuntimeError("Isolation verification failed.")"""))
+    raise RuntimeError("Partition isolation check failed.")"""))
 
-    # Cell 6: Execute Full Task 2.1 Suite via CLI runner
-    cells.append(md_cell("""### Execute Task 2.1 Real Generation & Telemetry Suite
-Executes all 6 probes sequentially across LLaVA-1.5-7B, Qwen2-VL-7B, and InternVL2-2B, capturing all GPU metrics and persisting official deliverables."""))
-
+    # Cell 6: Execute Full Task 2.1 Genuine Generation
+    cells.append(md_cell("## 5. Sequential Genuine Generation on Dual T4 GPUs"))
     cells.append(code_cell("""from scripts.kaggle_vlm_smoke_test import execute_task2_smoke_test
 
-report = execute_task2_smoke_test(
+# Execute genuine GPU inference across LLaVA-1.5-7B, Qwen2-VL-7B, and InternVL2-2B
+acceptance_report = execute_task2_smoke_test(
     models=["llava", "qwen2_vl", "internvl"],
     dry_run=False,
+    run_scale_8b=False,
     output_base=Path("artifacts"),
 )
 
-print(json.dumps(report, indent=2))"""))
+print(json.dumps(acceptance_report, indent=2))"""))
 
-    # Cell 7: Inspect Generated Deliverables
+    # Cell 7: Inspect Persisted Outputs
+    cells.append(md_cell("## 6. Inspect Generated Artifacts & Telemetry Reports"))
     cells.append(code_cell("""!ls -la artifacts/reports/
 !ls -la artifacts/generations/task2_verified/"""))
+
+    # Cell 8: Preview Sample Responses
+    cells.append(code_cell("""print("=== PREVIEW GENERATED ANSWERS ===")
+for model_file in ["llava.jsonl", "qwen2_vl.jsonl", "internvl2.jsonl"]:
+    p = Path(f"artifacts/generations/task2_verified/{model_file}")
+    if p.exists():
+        print(f"\\n--- {model_file} ---")
+        with open(p, "r") as f:
+            for idx, line in enumerate(f):
+                r = json.loads(line)
+                print(f"[{r['dataset']}] {r['sample_id']} ({r['latency_ms']:.1f}ms): {r['generated_answer'][:70]}")"""))
 
     notebook_dict = {
         "cells": cells,
