@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-11-03T20:09:04Z",
+  "execution_mode": "dry_run",
+  "system_info": {
+    "platform": "macOS-26.7-arm64-arm-64bit",
+    "python_version": "3.11.9",
+    "is_kaggle": false
+  },
+  "gpu_check_passed": false,
+  "gpu_check_details": "PyTorch is not installed in the environment.",
+  "initial_nvidia_smi": [],
+  "target_models": [
+    "llava",
+    "qwen2_vl",
+    "internvl"
+  ],
+  "precision": "torch.float16",
+  "models_config": {
+    "llava": {
+      "model_id": "llava-hf/llava-1.5-7b-hf",
+      "revision": "a272c74",
+      "architecture": "LlavaForConditionalGeneration",
+      "role": "adapter_validation",
+      "device_map": "auto",
+      "max_memory": "14GiB"
+    },
+    "qwen2_vl": {
+      "model_id": "Qwen/Qwen2-VL-7B-Instruct",
+      "revision": "847be15",
+      "architecture": "Qwen2VLForConditionalGeneration",
+      "role": "adapter_validation",
+      "device_map": "auto",
+      "max_memory": "14GiB"
+    },
+    "internvl": {
+      "model_id": "OpenGVLab/InternVL2-2B",
+      "revision": "cc06eec",
+      "architecture": "InternVLChatModel",
+      "role": "adapter_validation",
+      "device_map": "auto",
+      "max_memory": "14GiB"
+    }
+  }
+}

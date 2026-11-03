@@ -190,3 +190,42 @@ def test_mock_generation_workflow_conformance():
         assert out.input_tokens == 3
         assert out.output_tokens == 2
         assert out.latency_ms >= 0.0
+
+
+def test_telemetry_functions():
+    from src.generation.telemetry import (
+        query_nvidia_smi,
+        get_cuda_memory_snapshot,
+        ModelMemoryTelemetry,
+    )
+    smi = query_nvidia_smi()
+    assert isinstance(smi, list)
+
+    snap = get_cuda_memory_snapshot()
+    assert isinstance(snap, dict)
+
+    tel = ModelMemoryTelemetry("llava", "llava-hf/llava-1.5-7b-hf")
+    tel.capture_baseline()
+    tel.capture_after_load(1.23)
+    tel.capture_after_inference()
+    tel.capture_after_unload()
+    d = tel.to_dict()
+    assert d["model_key"] == "llava"
+    assert d["load_duration_sec"] == 1.23
+    assert "baseline_before_load" in d
+    assert "after_load" in d
+    assert "during_generation_peak" in d
+    assert "after_unload" in d
+
+
+def test_authentic_probe_definitions():
+    from scripts.kaggle_vlm_smoke_test import AUTHENTIC_PROBES, verify_file_sha256
+    assert len(AUTHENTIC_PROBES) == 6
+
+    # Verify each probe file exists and hash matches
+    for p in AUTHENTIC_PROBES:
+        img_path = Path(p["image_path"])
+        assert img_path.exists(), f"Image {img_path} must exist"
+        sha = verify_file_sha256(img_path)
+        assert sha == p["expected_sha256"]
+

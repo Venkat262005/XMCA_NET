@@ -85,3 +85,4 @@ Every generation output adheres strictly to the unified Pydantic schema:
 1. **Zero Inference on Local Mac**: Any invocation of `adapter.load()` outside the verified dual NVIDIA T4 environment raises an explicit `EnvironmentVerificationError`.
 2. **InfoSeek Materialization Guard**: If an attempt is made to run image-conditioned inference on InfoSeek samples before OVEN images are downloaded via authentic Kaggle Secrets `HF_TOKEN`, the generator raises an immediate `RuntimeError`.
 3. **Partition Isolation**: The 24 overlapping COCO images are barred from all training, calibration, early stopping, threshold selection, and model selection routines.
+

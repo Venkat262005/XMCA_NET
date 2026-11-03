@@ -100,6 +100,7 @@ class DatasetsConfig(BaseModel):
 
 class ModelItemConfig(BaseModel):
     family: str
+    role: Optional[str] = "adapter_validation"
     model_id: str
     revision: Optional[str] = None
     architecture: str

@@ -14,6 +14,12 @@ from src.generation.adapters import (
 )
 from src.generation.registry import get_adapter, list_available_adapters
 from src.generation.generator import GenerationOrchestrator
+from src.generation.telemetry import (
+    query_nvidia_smi,
+    get_cuda_memory_snapshot,
+    reset_peak_memory_stats,
+    ModelMemoryTelemetry,
+)
 
 __all__ = [
     "BaseVLMAdapter",
@@ -27,4 +33,8 @@ __all__ = [
     "get_adapter",
     "list_available_adapters",
     "GenerationOrchestrator",
+    "query_nvidia_smi",
+    "get_cuda_memory_snapshot",
+    "reset_peak_memory_stats",
+    "ModelMemoryTelemetry",
 ]

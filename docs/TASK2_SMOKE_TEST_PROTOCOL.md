@@ -72,3 +72,4 @@ flowchart TD
    python scripts/kaggle_vlm_smoke_test.py --output artifacts/reports/task2_smoke_test_report.json
    ```
 6. Download the persisted `artifacts/reports/task2_smoke_test_report.json`.
+

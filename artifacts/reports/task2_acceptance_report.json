@@ -1,0 +1,25 @@
+{
+  "task": "Task 2.1 \u2014 Real Dual-T4 Generation Verification",
+  "timestamp": "2026-11-03T20:09:05Z",
+  "execution_mode": "dry_run",
+  "total_probes_per_vlm": 6,
+  "total_models_evaluated": 3,
+  "total_records_generated": 18,
+  "acceptance_criteria": {
+    "dual_t4_gpu_detected": false,
+    "checkpoint_revisions_pinned": true,
+    "probe_images_sha256_verified": true,
+    "infoseek_safeguard_verified": true,
+    "cross_partition_isolation_verified": true,
+    "all_outputs_non_empty": true,
+    "memory_telemetry_complete": true
+  },
+  "deliverables": [
+    "artifacts/generations/task2_verified",
+    "artifacts/reports/task2_actual_gpu_execution.json",
+    "artifacts/reports/task2_model_load_report.json",
+    "artifacts/reports/task2_memory_telemetry.json",
+    "artifacts/reports/task2_generation_outputs.jsonl",
+    "artifacts/reports/task2_acceptance_report.json"
+  ]
+}

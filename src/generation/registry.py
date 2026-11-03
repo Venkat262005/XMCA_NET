@@ -68,3 +68,4 @@ def get_adapter(
         model_config=model_config,
         app_config=app_config,
     )
+
