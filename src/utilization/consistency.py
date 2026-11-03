@@ -18,3 +18,4 @@ class UtilizationConsistencyEstimator:
             "Utilization Consistency (S_U) calculation is pending task implementation. "
             "Dummy scores, random numbers, or proxy approximations are strictly prohibited."
         )
+

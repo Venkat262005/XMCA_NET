@@ -17,3 +17,4 @@ class BaselineEvaluator:
             f"Baseline '{self.baseline_name}' is pending task implementation. "
             "Dummy scores and hardcoded outputs are strictly prohibited."
         )
+

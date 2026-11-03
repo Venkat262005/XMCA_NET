@@ -21,3 +21,4 @@ class VLMGenerator:
             "Execution must occur on Kaggle dual NVIDIA T4 hardware. "
             "Dummy outputs or mock responses are strictly prohibited."
         )
+

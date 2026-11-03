@@ -61,3 +61,4 @@ def test_missing_model_revision_raises_error():
                 raise ValueError(
                     f"Strict mode violation: model '{name}' does not have an explicit git commit revision pin."
                 )
+

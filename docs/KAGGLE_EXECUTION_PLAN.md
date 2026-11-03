@@ -82,3 +82,4 @@ In Kaggle notebook sessions:
    - `artifacts/features/`: Extracted consistency diagnostic vectors.
    - `artifacts/reports/`: JSON metric summaries and markdown tables.
 4. Export artifacts using Kaggle output persistence or git push back to the repository.
+

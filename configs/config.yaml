@@ -38,3 +38,4 @@ paths:
   features_dir: "artifacts/features"
   models_dir: "artifacts/models"
   reports_dir: "artifacts/reports"
+

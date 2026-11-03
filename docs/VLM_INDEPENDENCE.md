@@ -43,3 +43,4 @@ To ensure findings reflect generalizable consistency dynamics rather than model-
    - Generations are stored independently in `artifacts/generations/{model_key}/{dataset_name}_{tier}.jsonl`.
    - Manifest validation (`src/utils/manifest.py`) asserts that the exact same sample IDs exist across all three model outputs before any comparative metrics are computed.
 5. **No Cross-Model Contamination**: Models are loaded and executed sequentially. At no point are outputs or intermediate states of one model exposed to another during inference.
+

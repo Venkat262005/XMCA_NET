@@ -69,3 +69,4 @@ def test_missing_required_dataset():
     }
     with pytest.raises(ValidationError, match="exactly four datasets required"):
         DatasetsConfig(**data)
+

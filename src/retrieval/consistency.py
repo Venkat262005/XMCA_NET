@@ -17,3 +17,4 @@ class RetrievalConsistencyEstimator:
             "Retrieval Consistency (S_R) calculation is pending task implementation. "
             "Dummy scores, random numbers, or proxy approximations are strictly prohibited."
         )
+

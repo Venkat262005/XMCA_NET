@@ -43,3 +43,4 @@ This document provides a transparent, authoritative status of all research compo
 - **Zero Synthetic Data**: Under no circumstances will synthetic or simulated dataset samples be added.
 - **Zero Dummy Scores**: All un-implemented diagnostic and combiner methods raise `NotImplementedError`. No hardcoded floating-point numbers or mock probability returns.
 - **Hardware Isolation**: Research model inference and feature extraction remain 100% restricted to Kaggle dual NVIDIA T4 GPUs.
+

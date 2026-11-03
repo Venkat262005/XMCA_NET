@@ -19,3 +19,4 @@ class MetricEvaluator:
             "Metric calculation is pending task authorization. "
             "Dummy metrics or fake evaluation results are strictly prohibited."
         )
+

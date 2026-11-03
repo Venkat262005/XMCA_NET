@@ -31,8 +31,8 @@ models:
 
   internvl:
     family: "InternVL"
-    model_id: "OpenGVLab/InternVL2-8B"
-    revision: "9826f68" # Explicit git commit SHA required under strict mode
+    model_id: "OpenGVLab/InternVL2-2B"
+    revision: "cc06eec" # Pinned commit revision for InternVL2-2B adapter validation
     architecture: "InternVLChatModel"
     dtype: "float16"
     device_map: "auto"
@@ -41,5 +41,10 @@ models:
       max_new_tokens: 128
       temperature: 0.0
       do_sample: false
-    multimodal_processor: "OpenGVLab/InternVL2-8B"
-    notes: "InternViT-6B backbone aligned with hermes-2-yi-34b/internlm"
+    multimodal_processor: "OpenGVLab/InternVL2-2B"
+    notes: "InternVL2-2B used for adapter validation before testing 8B separately"
+    alternative_scale_test:
+      model_id: "OpenGVLab/InternVL2-8B"
+      revision: "9826f68"
+      notes: "Requires custom multi-GPU split (explicit device map) due to ~16GB weights"
+

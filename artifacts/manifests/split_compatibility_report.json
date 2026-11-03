@@ -1,0 +1,26 @@
+{
+  "audit_timestamp": "2026-11-04T00:22:01.488584",
+  "pope_total_images_in_cohort": 453,
+  "faithscore_total_images_in_cohort": 30,
+  "aokvqa_total_images_in_cohort": 982,
+  "pope_faithscore_shared_coco_images": 1,
+  "pope_aokvqa_shared_coco_images": 23,
+  "faithscore_aokvqa_shared_coco_images": 0,
+  "shared_image_ids_pope_faithscore": [
+    506483
+  ],
+  "shared_image_ids_pope_aokvqa": [
+    125572,
+    369541,
+    3845,
+    536073,
+    549390,
+    100238,
+    353180,
+    500257,
+    13348,
+    222118
+  ],
+  "shared_image_ids_faithscore_aokvqa": [],
+  "leakage_risk_assessment": "POPE and FaithScore use official test splits; A-OKVQA uses official validation split. Because all four cohorts are strictly used for frozen-backbone zero-shot evaluation and diagnostic inference (no training on these samples), no cross-split parameter contamination occurs. However, shared physical images must be kept unlinked during comparative attribution."
+}

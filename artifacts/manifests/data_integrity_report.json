@@ -1,0 +1,46 @@
+{
+  "status": "VERIFIED",
+  "timestamp": "2026-11-04T00:22:01.508666",
+  "random_seed": 42,
+  "sample_counts": {
+    "pope": 1000,
+    "faithscore": 174,
+    "a_okvqa": 1000,
+    "infoseek": 1000
+  },
+  "progressive_tiers": {
+    "tier_100": {
+      "pope": 100,
+      "faithscore": 100,
+      "a_okvqa": 100,
+      "infoseek": 100
+    },
+    "tier_300": {
+      "pope": 300,
+      "faithscore": 174,
+      "a_okvqa": 300,
+      "infoseek": 300
+    },
+    "tier_600": {
+      "pope": 600,
+      "faithscore": 174,
+      "a_okvqa": 600,
+      "infoseek": 600
+    },
+    "tier_1000": {
+      "pope": 1000,
+      "faithscore": 174,
+      "a_okvqa": 1000,
+      "infoseek": 1000
+    }
+  },
+  "preflight_images": {
+    "pope_verified": 25,
+    "faithscore_verified": 25,
+    "aokvqa_verified": 25,
+    "infoseek_gated_pending_auth": 25
+  },
+  "duplicate_sample_ids_detected": 0,
+  "synthetic_records_allowed": false,
+  "synthetic_records_found": 0
+}

@@ -11,7 +11,7 @@ datasets:
       repository: "https://github.com/RUCAIBox/POPE"
       data_file: "data/raw/pope_coco_adversarial.json"
       images_source: "MSCOCO 2014 val"
-      expected_sha256: null # Enforced once raw download is finalized in Task 1
+      expected_sha256: "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8"
     required_fields:
       - "sample_id"
       - "image_id"
@@ -29,10 +29,10 @@ datasets:
     has_attribution_ground_truth: true
     attribution_focus: "perception_and_utilization"
     source:
-      repository: "https://github.com/j-min/FaithScore"
-      data_file: "data/raw/faithscore_annotations.json"
+      repository: "https://github.com/bcdnlp/FAITHSCORE"
+      data_file: "data/raw/faithscore_annotations.jsonl"
       images_source: "MSCOCO 2014 val"
-      expected_sha256: null
+      expected_sha256: "7d68dce9641f92fcdabd6e252cf12ee6ec9b6c1d5c4d306aef83666d299f1b7b"
     required_fields:
       - "sample_id"
       - "image_id"
@@ -51,9 +51,9 @@ datasets:
     attribution_focus: "retrieval_and_utilization"
     source:
       repository: "https://allenai.org/data/a-okvqa"
-      data_file: "data/raw/a_okvqa_v1.0_val.json"
+      data_file: "data/raw/aokvqa_v1p0_val.json"
       images_source: "MSCOCO 2017 val"
-      expected_sha256: null
+      expected_sha256: "fd90b05dec8d78d341b69d9516c54a9b30dd4c12c3545599dab5d6f725aba6b4"
     required_fields:
       - "sample_id"
       - "image_id"
@@ -72,10 +72,10 @@ datasets:
     has_attribution_ground_truth: false
     attribution_focus: "retrieval"
     source:
-      repository: "https://github.com/google-research-datasets/infoseek"
-      data_file: "data/raw/infoseek_val.json"
+      repository: "https://github.com/open-vision-language/infoseek"
+      data_file: "data/raw/infoseek_val.jsonl"
       images_source: "OVEN / ImageNet-based images"
-      expected_sha256: null
+      expected_sha256: "21240f83b4d7d9b5cc27f1546e486eb7c1eea9216b77a071acab1bfd9fc741c8"
     required_fields:
       - "sample_id"
       - "image_id"

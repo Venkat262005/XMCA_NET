@@ -97,3 +97,4 @@ pytest -v
 ```
 
 All 26 foundation tests should pass without requiring GPU access or local inference.
+

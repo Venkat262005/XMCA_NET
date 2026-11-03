@@ -68,3 +68,4 @@ $$\mathcal{T} \in \{100, 300, 600, 1000\}$$
 1. **No Synthetic Data**: No synthetically manufactured test sets, fake ground-truth labels, or pseudo-labels are permitted.
 2. **Checksum Verification**: Raw downloads must be verified with SHA-256 hashes recorded in `configs/datasets.yaml`.
 3. **Schema Enforcement**: All samples must pass Pydantic schema validation (`src/data/schema.py`) prior to inclusion in evaluation manifests.
+

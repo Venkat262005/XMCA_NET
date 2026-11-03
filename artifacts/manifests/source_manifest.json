@@ -1,0 +1,53 @@
+{
+  "pope": {
+    "repository": "https://github.com/RUCAIBox/POPE",
+    "revision": "7e24b45",
+    "file": "data/raw/pope_coco_adversarial.json",
+    "size_bytes": 370401,
+    "sha256": "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8",
+    "license": "Apache-2.0",
+    "official_split": "test",
+    "total_records": 3000,
+    "sampled_records": 1000
+  },
+  "faithscore": {
+    "repository": "https://github.com/bcdnlp/FAITHSCORE",
+    "revision": "c2a5fa2",
+    "file": "data/raw/faithscore_annotations.jsonl",
+    "size_bytes": 203676,
+    "sha256": "7d68dce9641f92fcdabd6e252cf12ee6ec9b6c1d5c4d306aef83666d299f1b7b",
+    "license": "MIT",
+    "official_split": "test",
+    "total_records": 174,
+    "sampled_records": 174,
+    "note": "180 verified human atomic-fact evaluation samples available in official release."
+  },
+  "a_okvqa": {
+    "repository": "https://allenai.org/data/a-okvqa",
+    "release": "v1.0",
+    "file": "data/raw/aokvqa_v1p0_val.json",
+    "size_bytes": 1032221,
+    "sha256": "fd90b05dec8d78d341b69d9516c54a9b30dd4c12c3545599dab5d6f725aba6b4",
+    "license": "CC BY 4.0",
+    "official_split": "val",
+    "total_records": 1145,
+    "sampled_records": 1000
+  },
+  "infoseek": {
+    "repository": "https://github.com/open-vision-language/infoseek",
+    "release": "EMNLP 2023",
+    "file": "data/raw/infoseek_val.jsonl",
+    "size_bytes": 21204639,
+    "sha256": "21240f83b4d7d9b5cc27f1546e486eb7c1eea9216b77a071acab1bfd9fc741c8",
+    "license": "CC BY 4.0",
+    "official_split": "val_unseen_question / val",
+    "total_records": 10000,
+    "sampled_records": 1000,
+    "wikipedia_6m_resources": {
+      "full_info_url": "http://storage.googleapis.com/gresearch/open-vision-language/Wiki6M_ver_1_0.jsonl.gz",
+      "full_info_size": "6.9 GB",
+      "title_only_url": "http://storage.googleapis.com/gresearch/open-vision-language/Wiki6M_ver_1_0_title_only.jsonl",
+      "title_only_size": "419 MB"
+    }
+  }
+}

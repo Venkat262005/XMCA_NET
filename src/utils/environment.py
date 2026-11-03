@@ -71,3 +71,4 @@ def enforce_strict_environment(config: Any) -> None:
                     f"Strict execution mode violation: {message}. "
                     "Research inference/training must be run on Kaggle dual NVIDIA T4 GPUs."
                 )
+

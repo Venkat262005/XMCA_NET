@@ -3,3 +3,4 @@
 from src.generation.generator import VLMGenerator
 
 __all__ = ["VLMGenerator"]
+

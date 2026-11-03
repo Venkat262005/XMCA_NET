@@ -108,6 +108,7 @@ class ModelItemConfig(BaseModel):
     generation_params: Dict[str, Any] = Field(default_factory=dict)
     multimodal_processor: str
     notes: Optional[str] = None
+    alternative_scale_test: Optional[Dict[str, Any]] = None
 
 
 class ModelsConfig(BaseModel):
@@ -185,3 +186,4 @@ def load_models_config(models_path: Optional[Path] = None, require_revision: boo
                     f"Strict mode violation: model '{name}' does not have an explicit git commit revision pin."
                 )
     return cfg
+

@@ -102,3 +102,4 @@ def test_valid_infoseek_sample():
 def test_unknown_dataset_schema():
     with pytest.raises(KeyError, match="Unknown dataset key"):
         validate_sample_schema("unsupported_dataset", {})
+

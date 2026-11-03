@@ -37,3 +37,4 @@ class XMCAAttributionHead:
             "XMCA cause-attribution head is pending task implementation. "
             "Synthetic labels and proxy calculations are strictly prohibited."
         )
+

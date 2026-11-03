@@ -9,7 +9,7 @@ from src.data.schema import (
     validate_sample_schema,
     SCHEMA_MAP,
 )
-from src.data.loader import DatasetLoader
+from src.data.loader import AuthenticDatasetLoader, NormalizedRecord
 
 __all__ = [
     "POPESample",
@@ -19,5 +19,7 @@ __all__ = [
     "InfoSeekSample",
     "validate_sample_schema",
     "SCHEMA_MAP",
-    "DatasetLoader",
+    "AuthenticDatasetLoader",
+    "NormalizedRecord",
 ]
+

@@ -17,3 +17,4 @@ class PerceptionConsistencyEstimator:
             "Perception Consistency (S_P) calculation is pending task implementation. "
             "Dummy scores, random numbers, or proxy approximations are strictly prohibited."
         )
+

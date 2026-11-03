@@ -90,3 +90,4 @@ The cause-attribution head assigns fine-grained failure modes to detected halluc
 1. **Zero Dummy Values**: Every diagnostic module raises `NotImplementedError` until authentic feature extraction and computation pipelines are authorized.
 2. **Deterministic Reproducibility**: Fixed random seeds, logged environment manifests, and pinned model revisions ensure 100% bit-exact experimental replicability.
 3. **Dual T4 Kaggle Isolation**: All model executions and heavy tensor diagnostics run exclusively on dual NVIDIA T4 GPUs in Kaggle.
+

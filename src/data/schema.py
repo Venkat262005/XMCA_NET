@@ -83,3 +83,4 @@ def validate_sample_schema(dataset_key: str, data: Dict[str, Any]) -> BaseModel:
             f"Unknown dataset key '{dataset_key}'. Must be one of: {list(SCHEMA_MAP.keys())}"
         )
     return SCHEMA_MAP[key](**data)
+
