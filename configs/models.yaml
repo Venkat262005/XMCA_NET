@@ -1,0 +1,45 @@
+models:
+  llava:
+    family: "LLaVA"
+    model_id: "llava-hf/llava-1.5-7b-hf"
+    revision: "a272c74" # Explicit git commit SHA required under strict mode
+    architecture: "LlavaForConditionalGeneration"
+    dtype: "float16"
+    device_map: "auto"
+    max_memory_per_gpu: "14GiB"
+    generation_params:
+      max_new_tokens: 128
+      temperature: 0.0
+      do_sample: false
+    multimodal_processor: "llava-hf/llava-1.5-7b-hf"
+    notes: "Baseline 7B model using Vicuna backbone and CLIP-ViT-L/14"
+
+  qwen2_vl:
+    family: "Qwen2-VL"
+    model_id: "Qwen/Qwen2-VL-7B-Instruct"
+    revision: "847be15" # Explicit git commit SHA required under strict mode
+    architecture: "Qwen2VLForConditionalGeneration"
+    dtype: "float16"
+    device_map: "auto"
+    max_memory_per_gpu: "14GiB"
+    generation_params:
+      max_new_tokens: 128
+      temperature: 0.0
+      do_sample: false
+    multimodal_processor: "Qwen/Qwen2-VL-7B-Instruct"
+    notes: "Dynamic resolution naive ViT with high-resolution visual grounding"
+
+  internvl:
+    family: "InternVL"
+    model_id: "OpenGVLab/InternVL2-8B"
+    revision: "9826f68" # Explicit git commit SHA required under strict mode
+    architecture: "InternVLChatModel"
+    dtype: "float16"
+    device_map: "auto"
+    max_memory_per_gpu: "14GiB"
+    generation_params:
+      max_new_tokens: 128
+      temperature: 0.0
+      do_sample: false
+    multimodal_processor: "OpenGVLab/InternVL2-8B"
+    notes: "InternViT-6B backbone aligned with hermes-2-yi-34b/internlm"

@@ -1,0 +1,85 @@
+datasets:
+  pope:
+    name: "POPE"
+    full_name: "Polling-based Object Probing Evaluation"
+    task_type: "object_hallucination_detection"
+    splits: ["test"]
+    supported_tiers: [100, 300, 600, 1000]
+    has_attribution_ground_truth: true
+    attribution_focus: "perception"
+    source:
+      repository: "https://github.com/RUCAIBox/POPE"
+      data_file: "data/raw/pope_coco_adversarial.json"
+      images_source: "MSCOCO 2014 val"
+      expected_sha256: null # Enforced once raw download is finalized in Task 1
+    required_fields:
+      - "sample_id"
+      - "image_id"
+      - "image_path"
+      - "question"
+      - "ground_truth_label"
+      - "category"
+
+  faithscore:
+    name: "FaithScore"
+    full_name: "FaithScore: Atomic Fact Evaluation of Hallucination"
+    task_type: "descriptive_hallucination_evaluation"
+    splits: ["test"]
+    supported_tiers: [100, 300, 600, 1000]
+    has_attribution_ground_truth: true
+    attribution_focus: "perception_and_utilization"
+    source:
+      repository: "https://github.com/j-min/FaithScore"
+      data_file: "data/raw/faithscore_annotations.json"
+      images_source: "MSCOCO 2014 val"
+      expected_sha256: null
+    required_fields:
+      - "sample_id"
+      - "image_id"
+      - "image_path"
+      - "question"
+      - "atomic_facts"
+      - "ground_truth_label"
+
+  a_okvqa:
+    name: "A-OKVQA"
+    full_name: "Augmented OK-VQA"
+    task_type: "knowledge_visual_question_answering"
+    splits: ["val"]
+    supported_tiers: [100, 300, 600, 1000]
+    has_attribution_ground_truth: false
+    attribution_focus: "retrieval_and_utilization"
+    source:
+      repository: "https://allenai.org/data/a-okvqa"
+      data_file: "data/raw/a_okvqa_v1.0_val.json"
+      images_source: "MSCOCO 2017 val"
+      expected_sha256: null
+    required_fields:
+      - "sample_id"
+      - "image_id"
+      - "image_path"
+      - "question"
+      - "choices"
+      - "correct_choice_idx"
+      - "rationales"
+
+  infoseek:
+    name: "InfoSeek"
+    full_name: "InfoSeek: Information-Seeking VQA"
+    task_type: "fine_grained_information_retrieval_vqa"
+    splits: ["val"]
+    supported_tiers: [100, 300, 600, 1000]
+    has_attribution_ground_truth: false
+    attribution_focus: "retrieval"
+    source:
+      repository: "https://github.com/google-research-datasets/infoseek"
+      data_file: "data/raw/infoseek_val.json"
+      images_source: "OVEN / ImageNet-based images"
+      expected_sha256: null
+    required_fields:
+      - "sample_id"
+      - "image_id"
+      - "image_path"
+      - "question"
+      - "entity_id"
+      - "golden_answers"

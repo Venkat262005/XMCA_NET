@@ -1,0 +1,76 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Kaggle credentials & local secrets
+kaggle.json
+*.pem
+*.key
+
+# Data directories (keep directory structure via .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+data/images/*
+!data/images/.gitkeep
+
+# Artifact caches & generated outputs (keep directory structure via .gitkeep)
+artifacts/corpora/*
+!artifacts/corpora/.gitkeep
+artifacts/generations/*
+!artifacts/generations/.gitkeep
+artifacts/features/*
+!artifacts/features/.gitkeep
+artifacts/models/*
+!artifacts/models/.gitkeep
+
+# Test coverage & logs
+.pytest_cache/
+.coverage
+htmlcov/
+*.log

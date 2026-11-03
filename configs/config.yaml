@@ -1,0 +1,40 @@
+project:
+  name: "XMCA-Net"
+  full_name: "Cross-Modal Consistency Attribution Network"
+  version: "0.1.0"
+
+execution:
+  strict_mode: true
+  allow_fallbacks: false
+  allow_synthetic_data: false
+  require_source_hashes: true
+  require_model_revision: true
+  kaggle_gpu_required: true
+
+hardware:
+  target_platform: "kaggle"
+  expected_accelerator: "NVIDIA T4"
+  expected_gpu_count: 2
+  gpu_memory_gb_per_device: 15.0
+  local_inference_permitted: false
+
+evaluation:
+  progressive_tiers:
+    - 100
+    - 300
+    - 600
+    - 1000
+  matched_sample_ids_enforced: true
+  random_seed: 42
+
+paths:
+  data_dir: "data"
+  raw_dir: "data/raw"
+  images_dir: "data/images"
+  artifacts_dir: "artifacts"
+  manifests_dir: "artifacts/manifests"
+  corpora_dir: "artifacts/corpora"
+  generations_dir: "artifacts/generations"
+  features_dir: "artifacts/features"
+  models_dir: "artifacts/models"
+  reports_dir: "artifacts/reports"
