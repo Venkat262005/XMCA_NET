@@ -70,4 +70,4 @@ def test_enforce_strict_environment_failure():
 def test_dataset_loader_prohibits_fallbacks_on_missing_file():
     loader = DatasetLoader(data_raw_dir=Path("non_existent_dir"))
     with pytest.raises(FileNotFoundError):
-        loader.load_pope("non_existent_data_file.json")
+        loader.load_pope("adversarial")

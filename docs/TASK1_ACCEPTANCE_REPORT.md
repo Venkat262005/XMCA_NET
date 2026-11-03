@@ -117,3 +117,4 @@ artifacts/manifests/
 ## 8. Stop Condition
 
 Task 1 is complete. No VLM inference, feature extraction, scoring, or model training has been initiated. Awaiting user authorization before moving to Task 2.
+

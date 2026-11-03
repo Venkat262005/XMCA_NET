@@ -27,17 +27,19 @@ def manifests():
         "integrity": json.loads((manifest_dir / "data_integrity_report.json").read_text(encoding="utf-8")),
         "split": json.loads((manifest_dir / "split_compatibility_report.json").read_text(encoding="utf-8")),
         "failures": json.loads((manifest_dir / "download_failures.json").read_text(encoding="utf-8")),
-        "cohort": pd.read_parquet(manifest_dir / "candidate_cohort_manifest.parquet"),
+        "storage": json.loads((manifest_dir / "storage_audit.json").read_text(encoding="utf-8")),
+        "cohort": pd.read_parquet(manifest_dir / "cohort_manifest.parquet"),
         "inventory": pd.read_parquet(manifest_dir / "dataset_inventory.parquet"),
         "images": pd.read_parquet(manifest_dir / "image_manifest.parquet"),
+        "image_groups": pd.read_parquet(manifest_dir / "global_image_group_manifest.parquet"),
     }
 
 
 def test_authentic_source_id_verification(raw_loader):
     """Verify authentic source IDs from original releases."""
-    pope = raw_loader.load_pope()
-    assert len(pope) == 3000
-    assert pope[0].original_sample_id.isdigit()
+    pope = raw_loader.load_pope("all")
+    assert len(pope) == 9000
+    assert pope[0].original_sample_id.startswith("pope_")
     assert pope[0].original_image_id.startswith("COCO_val2014_")
 
     faith = raw_loader.load_faithscore()
@@ -71,7 +73,15 @@ def test_sha256_verification(manifests):
                 hasher.update(chunk)
         calculated_hash = hasher.hexdigest()
         assert calculated_hash == expected_hash
-        assert manifests["source"][ds_key]["sha256"] == expected_hash
+
+        sm_entry = manifests["source"][ds_key]
+        if "strategies" in sm_entry:
+            manifest_hash = sm_entry["strategies"]["adversarial"]["sha256"]
+        elif "human_annotations" in sm_entry:
+            manifest_hash = sm_entry["human_annotations"]["sha256"]
+        else:
+            manifest_hash = sm_entry["sha256"]
+        assert manifest_hash == expected_hash
 
 
 def test_original_split_preservation(raw_loader, manifests):
@@ -161,14 +171,71 @@ def test_failed_download_reporting(manifests):
     assert len(failures) == 25 # InfoSeek gated images recorded
     for failure in failures:
         assert failure["dataset_id"] == "infoseek"
-        assert failure["status"] == "access_restricted"
+        assert "access_restricted" in failure["status"]
         assert "Hugging Face" in failure["error"]
 
 
 def test_cross_dataset_image_overlap_analysis(manifests):
     """Verify physical image overlap across COCO-derived cohorts is audited."""
     split_rep = manifests["split"]
-    assert "pope_faithscore_shared_coco_images" in split_rep
-    assert "pope_aokvqa_shared_coco_images" in split_rep
-    assert "leakage_risk_assessment" in split_rep
-    assert split_rep["pope_aokvqa_shared_coco_images"] >= 0
+    assert "pope_cohort_strategies" in split_rep
+    assert split_rep["pope_cohort_strategies"]["adversarial"] == 334
+    assert split_rep["pope_cohort_strategies"]["popular"] == 333
+    assert split_rep["pope_cohort_strategies"]["random"] == 333
+    assert "combiner_leakage_mitigation" in split_rep
+
+
+def test_pope_three_strategies_acquisition(raw_loader, manifests):
+    """Verify all 3 POPE strategies are acquired with 3,000 records each and balanced cohort."""
+    for strat in ["adversarial", "popular", "random"]:
+        recs = raw_loader.load_pope(strategy=strat)
+        assert len(recs) == 3000
+        labels = [r.official_answer_fields["label"] for r in recs]
+        assert labels.count("yes") == 1500
+        assert labels.count("no") == 1500
+
+    # Verify balanced sampling in cohort
+    df_cohort = manifests["cohort"]
+    pope_cohort = df_cohort[df_cohort["dataset_id"] == "pope"]
+    assert len(pope_cohort) == 1000
+    adv_count = sum(1 for sid in pope_cohort["original_sample_id"] if "adversarial" in sid)
+    pop_count = sum(1 for sid in pope_cohort["original_sample_id"] if "popular" in sid)
+    rnd_count = sum(1 for sid in pope_cohort["original_sample_id"] if "random" in sid)
+    assert adv_count == 334
+    assert pop_count == 333
+    assert rnd_count == 333
+
+
+def test_global_image_group_manifest(manifests):
+    """Verify global image grouping prevents combiner leakage across splits."""
+    df_groups = manifests["image_groups"]
+    assert len(df_groups) > 0
+    assert "global_group_id" in df_groups.columns
+    assert "combiner_partition" in df_groups.columns
+    assert "eligible_for_combiner_training" in df_groups.columns
+    assert "split_conflict" in df_groups.columns
+
+    # Any image with split conflict (test vs val) must be explicitly ineligible for training
+    conflicts = df_groups[df_groups["split_conflict"] == True]
+    assert len(conflicts) > 0 # Detected shared images between POPE/FaithScore (test) and A-OKVQA (val)
+    for eligible in conflicts["eligible_for_combiner_training"]:
+        assert eligible is False or eligible == False
+
+
+def test_storage_audit_and_quotas(manifests):
+    """Verify Kaggle storage rules and 20GB persistent quota documentation."""
+    storage = manifests["storage"]
+    assert "/kaggle/working" in storage["kaggle_mount_rules"]
+    assert storage["kaggle_mount_rules"]["/kaggle/working"]["quota_limit_gb"] == 20.0
+    assert "/tmp" in storage["kaggle_mount_rules"]
+    assert "/kaggle/input" in storage["kaggle_mount_rules"]
+
+
+def test_faithscore_human_vs_automated_distinction(manifests):
+    """Verify FaithScore human annotation ground truth is strictly distinguished from automated benchmarks."""
+    sm = manifests["source"]["faithscore"]
+    assert "human_annotations" in sm
+    assert sm["human_annotations"]["unique_records"] == 174
+    assert sm["human_annotations"]["physical_images"] == 30
+    assert "automated_evaluation_resources" in sm
+    assert sm["automated_evaluation_resources"]["has_human_ground_truth"] is False

@@ -1,0 +1,25 @@
+{
+  "audit_timestamp": "2026-11-04T00:46:11.681407",
+  "kaggle_mount_rules": {
+    "/kaggle/working": {
+      "mount_type": "Persistent Output",
+      "quota_limit_gb": 20.0,
+      "usage_policy": "Strictly reserved for lightweight manifests, checkpoints, and final evaluation reports."
+    },
+    "/tmp": {
+      "mount_type": "Ephemeral Scratch",
+      "capacity_gb": "~70.0 GB",
+      "usage_policy": "Used for temporary uncompressed archives and scratch tensor operations."
+    },
+    "/kaggle/input": {
+      "mount_type": "Read-Only Dataset Mounts",
+      "usage_policy": "Used for mounting pre-downloaded OVEN images and Wikipedia corpora via Kaggle Datasets."
+    }
+  },
+  "artifact_sizes_bytes": {
+    "dataset_inventory.parquet": 1606101,
+    "cohort_manifest.parquet": 333182,
+    "global_image_group_manifest.parquet": 42281,
+    "image_manifest.parquet": 17503
+  }
+}

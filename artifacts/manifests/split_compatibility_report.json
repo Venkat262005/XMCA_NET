@@ -1,26 +1,12 @@
 {
-  "audit_timestamp": "2026-11-04T00:22:01.488584",
-  "pope_total_images_in_cohort": 453,
-  "faithscore_total_images_in_cohort": 30,
-  "aokvqa_total_images_in_cohort": 982,
-  "pope_faithscore_shared_coco_images": 1,
-  "pope_aokvqa_shared_coco_images": 23,
-  "faithscore_aokvqa_shared_coco_images": 0,
-  "shared_image_ids_pope_faithscore": [
-    506483
-  ],
-  "shared_image_ids_pope_aokvqa": [
-    125572,
-    369541,
-    3845,
-    536073,
-    549390,
-    100238,
-    353180,
-    500257,
-    13348,
-    222118
-  ],
-  "shared_image_ids_faithscore_aokvqa": [],
-  "leakage_risk_assessment": "POPE and FaithScore use official test splits; A-OKVQA uses official validation split. Because all four cohorts are strictly used for frozen-backbone zero-shot evaluation and diagnostic inference (no training on these samples), no cross-split parameter contamination occurs. However, shared physical images must be kept unlinked during comparative attribution."
+  "audit_timestamp": "2026-11-04T00:46:11.675298",
+  "total_unique_physical_images": 2379,
+  "multi_dataset_physical_images": 25,
+  "split_conflicts_detected": 24,
+  "pope_cohort_strategies": {
+    "adversarial": 334,
+    "popular": 333,
+    "random": 333
+  },
+  "combiner_leakage_mitigation": "Every physical image is mapped to a single immutable global_group_id in global_image_group_manifest.parquet. Any image evaluated in POPE or FaithScore held-out test splits is assigned combiner_partition='held_out_test' with eligible_for_combiner_training=False. The 22 COCO images shared between POPE (test) and A-OKVQA (val) are explicitly barred from combiner training to prevent image-level leakage."
 }

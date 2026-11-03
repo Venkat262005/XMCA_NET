@@ -67,3 +67,4 @@
   - FaithScore: 180 unique physical images.
   - A-OKVQA: 1,000 unique physical images.
   - InfoSeek: 1,000 unique physical images.
+

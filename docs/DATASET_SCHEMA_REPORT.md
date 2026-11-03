@@ -80,3 +80,4 @@ class NormalizedRecord(BaseModel):
 
 1. **No Imputation**: If an original record does not contain rationales or sub-sentences, the field is either omitted or initialized as an empty structure; it is never filled with synthetic LLM text.
 2. **Deterministic Cryptographic Hashing**: Every record contains `source_record_hash = sha256(canonical_json(raw_record))`, guaranteeing byte-level provenance traceable back to original release files.
+

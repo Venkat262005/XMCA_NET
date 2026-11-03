@@ -77,6 +77,7 @@ class DatasetItemConfig(BaseModel):
     attribution_focus: str
     source: DatasetSourceConfig
     required_fields: List[str]
+    strategies: Optional[Dict[str, Any]] = None
 
 
 class DatasetsConfig(BaseModel):

@@ -7,6 +7,16 @@ datasets:
     supported_tiers: [100, 300, 600, 1000]
     has_attribution_ground_truth: true
     attribution_focus: "perception"
+    strategies:
+      adversarial:
+        file: "data/raw/pope_coco_adversarial.json"
+        sha256: "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8"
+      popular:
+        file: "data/raw/pope_coco_popular.json"
+        sha256: "72c1a8ad45d0c13514f5f22598261df41d3b533854d29682e924db50ed8aa753"
+      random:
+        file: "data/raw/pope_coco_random.json"
+        sha256: "ac25245170b975a5bdf9080b23fd431dfe6be458bc038259c1f4f09a6bef7994"
     source:
       repository: "https://github.com/RUCAIBox/POPE"
       data_file: "data/raw/pope_coco_adversarial.json"

@@ -2,25 +2,54 @@
   "pope": {
     "repository": "https://github.com/RUCAIBox/POPE",
     "revision": "7e24b45",
-    "file": "data/raw/pope_coco_adversarial.json",
-    "size_bytes": 370401,
-    "sha256": "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8",
+    "strategies": {
+      "adversarial": {
+        "file": "data/raw/pope_coco_adversarial.json",
+        "size_bytes": 370401,
+        "sha256": "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8",
+        "available_records": 3000,
+        "sampled_records": 334
+      },
+      "popular": {
+        "file": "data/raw/pope_coco_popular.json",
+        "size_bytes": 370190,
+        "sha256": "72c1a8ad45d0c13514f5f22598261df41d3b533854d29682e924db50ed8aa753",
+        "available_records": 3000,
+        "sampled_records": 333
+      },
+      "random": {
+        "file": "data/raw/pope_coco_random.json",
+        "size_bytes": 368166,
+        "sha256": "ac25245170b975a5bdf9080b23fd431dfe6be458bc038259c1f4f09a6bef7994",
+        "available_records": 3000,
+        "sampled_records": 333
+      }
+    },
+    "total_available": 9000,
+    "sampled_cohort": 1000,
     "license": "Apache-2.0",
     "official_split": "test",
-    "total_records": 3000,
-    "sampled_records": 1000
+    "sha256": "420b3407db1fa9f1187a805dca41cb7b97fd91504e6c2179706188c107fb8ef8"
   },
   "faithscore": {
     "repository": "https://github.com/bcdnlp/FAITHSCORE",
     "revision": "c2a5fa2",
-    "file": "data/raw/faithscore_annotations.jsonl",
-    "size_bytes": 203676,
-    "sha256": "7d68dce9641f92fcdabd6e252cf12ee6ec9b6c1d5c4d306aef83666d299f1b7b",
+    "human_annotations": {
+      "file": "data/raw/faithscore_annotations.jsonl",
+      "size_bytes": 203676,
+      "sha256": "7d68dce9641f92fcdabd6e252cf12ee6ec9b6c1d5c4d306aef83666d299f1b7b",
+      "total_lines": 180,
+      "unique_records": 174,
+      "physical_images": 30
+    },
+    "automated_evaluation_resources": {
+      "description": "Un-annotated model evaluation testbeds (LLaVA-1k, MSCOCO-Cap) described in Jing et al. (EMNLP 2024).",
+      "has_human_ground_truth": false,
+      "status": "Audited as distinct automated benchmark without human attribution labels."
+    },
     "license": "MIT",
     "official_split": "test",
-    "total_records": 174,
-    "sampled_records": 174,
-    "note": "180 verified human atomic-fact evaluation samples available in official release."
+    "sampled_cohort": 174
   },
   "a_okvqa": {
     "repository": "https://allenai.org/data/a-okvqa",
@@ -31,7 +60,7 @@
     "license": "CC BY 4.0",
     "official_split": "val",
     "total_records": 1145,
-    "sampled_records": 1000
+    "sampled_cohort": 1000
   },
   "infoseek": {
     "repository": "https://github.com/open-vision-language/infoseek",
@@ -41,11 +70,11 @@
     "sha256": "21240f83b4d7d9b5cc27f1546e486eb7c1eea9216b77a071acab1bfd9fc741c8",
     "license": "CC BY 4.0",
     "official_split": "val_unseen_question / val",
-    "total_records": 10000,
-    "sampled_records": 1000,
-    "wikipedia_6m_resources": {
-      "full_info_url": "http://storage.googleapis.com/gresearch/open-vision-language/Wiki6M_ver_1_0.jsonl.gz",
-      "full_info_size": "6.9 GB",
+    "total_records": 25274,
+    "sampled_cohort": 1000,
+    "wikipedia_6m": {
+      "full_text_url": "http://storage.googleapis.com/gresearch/open-vision-language/Wiki6M_ver_1_0.jsonl.gz",
+      "full_text_size": "6.9 GB compressed (~20+ GB uncompressed)",
       "title_only_url": "http://storage.googleapis.com/gresearch/open-vision-language/Wiki6M_ver_1_0_title_only.jsonl",
       "title_only_size": "419 MB"
     }

@@ -59,3 +59,4 @@ Because POPE, FaithScore, and A-OKVQA all source imagery from the Microsoft Comm
 | **FaithScore vs. A-OKVQA** | **9 images** | None (Zero-shot test vs. zero-shot validation) | Isolated execution directories per dataset. |
 
 *Protocol Compliance: Because all evaluations in XMCA-Net are conducted with frozen VLM backbones and zero-shot diagnostic inference, physical image overlap across evaluation splits presents zero risk of weight leakage.*
+

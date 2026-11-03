@@ -95,3 +95,4 @@ In accordance with Task 1 specifications, the official InfoSeek six-million-arti
   1. No personal access tokens are stored in repository files, git commits, or configs.
   2. The Kaggle execution notebook includes preflight authentication checks for `HF_TOKEN`.
   3. Bulk archive downloads (>260 GB) are strictly avoided in favor of selective single-image materialization.
+

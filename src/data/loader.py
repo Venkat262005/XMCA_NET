@@ -45,34 +45,49 @@ class AuthenticDatasetLoader:
     def __init__(self, data_raw_dir: Optional[Path] = None):
         self.data_raw_dir = Path(data_raw_dir or "data/raw")
 
-    def load_pope(self, filename: str = "pope_coco_adversarial.json") -> List[NormalizedRecord]:
-        file_path = self.data_raw_dir / filename
-        if not file_path.exists():
-            raise FileNotFoundError(f"Authentic POPE file not found: {file_path}")
+    def load_pope(self, strategy: str = "all") -> List[NormalizedRecord]:
+        """Load authentic POPE benchmark records across sampling strategies.
 
+        Args:
+            strategy: 'adversarial', 'popular', 'random', or 'all' (default: 'all')
+        """
+        strategies = ["adversarial", "popular", "random"] if strategy == "all" else [strategy]
         records: List[NormalizedRecord] = []
-        with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line_str = line.strip()
-                if not line_str:
-                    continue
-                item = json.loads(line_str)
-                rec = NormalizedRecord(
-                    dataset_id="pope",
-                    original_sample_id=str(item["question_id"]),
-                    original_image_id=item["image"],
-                    original_split="test",
-                    question=item["text"],
-                    official_answer_fields={"label": item["label"]},
-                    official_label_fields={
-                        "target_present": item["label"].strip().lower() == "yes",
-                        "hallucination_binary": 0 if item["label"].strip().lower() == "yes" else 1,
-                    },
-                    source_revision="RUCAIBox/POPE@7e24b45",
-                    source_record_hash=compute_dict_hash(item),
-                    raw_record=item,
-                )
-                records.append(rec)
+
+        for strat in strategies:
+            filename = f"pope_coco_{strat}.json"
+            file_path = self.data_raw_dir / filename
+            if not file_path.exists():
+                raise FileNotFoundError(f"Authentic POPE file for strategy '{strat}' not found: {file_path}")
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_str = line.strip()
+                    if not line_str:
+                        continue
+                    item = json.loads(line_str)
+                    sample_id = f"pope_{strat}_{item['question_id']}"
+                    rec = NormalizedRecord(
+                        dataset_id="pope",
+                        original_sample_id=sample_id,
+                        original_image_id=item["image"],
+                        original_split="test",
+                        question=item["text"],
+                        official_answer_fields={
+                            "label": item["label"],
+                            "strategy": strat,
+                            "question_id": item["question_id"],
+                        },
+                        official_label_fields={
+                            "target_present": item["label"].strip().lower() == "yes",
+                            "hallucination_binary": 0 if item["label"].strip().lower() == "yes" else 1,
+                            "sampling_strategy": strat,
+                        },
+                        source_revision="RUCAIBox/POPE@7e24b45",
+                        source_record_hash=compute_dict_hash({**item, "strategy": strat}),
+                        raw_record=item,
+                    )
+                    records.append(rec)
         return records
 
     def load_faithscore(self, filename: str = "faithscore_annotations.jsonl", deduplicate: bool = True) -> List[NormalizedRecord]:
