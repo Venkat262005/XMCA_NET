@@ -203,6 +203,21 @@ class InternVLAdapter(BaseVLMAdapter):
             low_cpu_mem_usage=True,
         )
 
+        # Restore GenerationMixin for transformers 4.50+ / 5.x compatibility
+        from transformers.generation import GenerationMixin
+        for target in [self.model, getattr(self.model, "language_model", None)]:
+            if target is not None and not hasattr(target, "generate"):
+                cls = target.__class__
+                if GenerationMixin not in cls.__bases__:
+                    try:
+                        cls.__bases__ = tuple(list(cls.__bases__) + [GenerationMixin])
+                    except Exception:
+                        pass
+                if not hasattr(target, "generate"):
+                    for attr_name in dir(GenerationMixin):
+                        if not attr_name.startswith("__") and not hasattr(cls, attr_name):
+                            setattr(cls, attr_name, getattr(GenerationMixin, attr_name))
+
         self.model.eval()
         self._is_loaded = True
 
@@ -257,6 +272,19 @@ class InternVLAdapter(BaseVLMAdapter):
         }
         if sample and temp > 0:
             generation_config["temperature"] = temp
+
+        # Ensure language model has GenerationMixin methods (transformers 4.50+ / 5.x)
+        if hasattr(self.model, "language_model") and not hasattr(self.model.language_model, "generate"):
+            from transformers.generation import GenerationMixin
+            cls = self.model.language_model.__class__
+            if GenerationMixin not in cls.__bases__:
+                try:
+                    cls.__bases__ = tuple(list(cls.__bases__) + [GenerationMixin])
+                except Exception:
+                    pass
+            for attr_name in dir(GenerationMixin):
+                if not attr_name.startswith("__") and not hasattr(cls, attr_name):
+                    setattr(cls, attr_name, getattr(GenerationMixin, attr_name))
 
         start_time = time.perf_counter()
         with torch.no_grad():
