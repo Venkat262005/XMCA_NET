@@ -177,17 +177,21 @@ class InternVLAdapter(BaseVLMAdapter):
         import torch.nn as nn
 
         def _get_tied_keys(mod):
-            if hasattr(mod, "_all_tied_weights_keys"):
-                return mod._all_tied_weights_keys
-            return getattr(mod, "_tied_weights_keys", {})
+            val = getattr(mod, "_all_tied_weights_keys", None)
+            if isinstance(val, dict):
+                return val
+            val = getattr(mod, "_tied_weights_keys", None)
+            if isinstance(val, dict):
+                return val
+            if isinstance(val, (list, tuple, set)):
+                return {k: k for k in val}
+            return {}
 
         def _set_tied_keys(mod, val):
-            mod._all_tied_weights_keys = val
+            mod._all_tied_weights_keys = val if isinstance(val, dict) else {}
 
-        if not hasattr(PreTrainedModel, "all_tied_weights_keys"):
-            PreTrainedModel.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
-        if not hasattr(nn.Module, "all_tied_weights_keys"):
-            nn.Module.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+        PreTrainedModel.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+        nn.Module.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
 
         self.model = AutoModel.from_pretrained(
             self.model_id,
