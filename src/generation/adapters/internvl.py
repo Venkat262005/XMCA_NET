@@ -204,19 +204,22 @@ class InternVLAdapter(BaseVLMAdapter):
         )
 
         # Restore GenerationMixin for transformers 4.50+ / 5.x compatibility
-        from transformers.generation import GenerationMixin
-        for target in [self.model, getattr(self.model, "language_model", None)]:
-            if target is not None and not hasattr(target, "generate"):
-                cls = target.__class__
-                if GenerationMixin not in cls.__bases__:
-                    try:
-                        cls.__bases__ = tuple(list(cls.__bases__) + [GenerationMixin])
-                    except Exception:
-                        pass
-                if not hasattr(target, "generate"):
-                    for attr_name in dir(GenerationMixin):
-                        if not attr_name.startswith("__") and not hasattr(cls, attr_name):
-                            setattr(cls, attr_name, getattr(GenerationMixin, attr_name))
+        try:
+            from transformers.generation import GenerationMixin
+            for mod_name, mod in list(sys.modules.items()):
+                for cls_name in ["InternLM2ForCausalLM", "InternVLChatModel"]:
+                    if hasattr(mod, cls_name):
+                        target_cls = getattr(mod, cls_name)
+                        if isinstance(target_cls, type) and GenerationMixin not in target_cls.__bases__:
+                            target_cls.__bases__ = (GenerationMixin,) + target_cls.__bases__
+
+            for target in [self.model, getattr(self.model, "language_model", None)]:
+                if target is not None:
+                    cls = target.__class__
+                    if GenerationMixin not in cls.__bases__:
+                        cls.__bases__ = (GenerationMixin,) + cls.__bases__
+        except Exception:
+            pass
 
         self.model.eval()
         self._is_loaded = True
@@ -274,17 +277,20 @@ class InternVLAdapter(BaseVLMAdapter):
             generation_config["temperature"] = temp
 
         # Ensure language model has GenerationMixin methods (transformers 4.50+ / 5.x)
-        if hasattr(self.model, "language_model") and not hasattr(self.model.language_model, "generate"):
+        try:
             from transformers.generation import GenerationMixin
-            cls = self.model.language_model.__class__
-            if GenerationMixin not in cls.__bases__:
-                try:
-                    cls.__bases__ = tuple(list(cls.__bases__) + [GenerationMixin])
-                except Exception:
-                    pass
-            for attr_name in dir(GenerationMixin):
-                if not attr_name.startswith("__") and not hasattr(cls, attr_name):
-                    setattr(cls, attr_name, getattr(GenerationMixin, attr_name))
+            for mod_name, mod in list(sys.modules.items()):
+                for cls_name in ["InternLM2ForCausalLM", "InternVLChatModel"]:
+                    if hasattr(mod, cls_name):
+                        target_cls = getattr(mod, cls_name)
+                        if isinstance(target_cls, type) and GenerationMixin not in target_cls.__bases__:
+                            target_cls.__bases__ = (GenerationMixin,) + target_cls.__bases__
+
+            lm = getattr(self.model, "language_model", None)
+            if lm is not None and GenerationMixin not in lm.__class__.__bases__:
+                lm.__class__.__bases__ = (GenerationMixin,) + lm.__class__.__bases__
+        except Exception:
+            pass
 
         start_time = time.perf_counter()
         with torch.no_grad():
