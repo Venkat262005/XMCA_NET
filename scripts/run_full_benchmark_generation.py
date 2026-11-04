@@ -71,8 +71,26 @@ def locate_image(images_dir: Path, dataset_id: str, original_image_id: str) -> O
         images_dir / dataset_id / original_image_id,
         images_dir / "coco" / original_image_id,
         images_dir / "preflight" / original_image_id,
+        images_dir / "preflight" / dataset_id / original_image_id,
+        images_dir / "val2014" / original_image_id,
+        images_dir / "val2017" / original_image_id,
         Path("kaggle_upload/task2_smoke/images") / original_image_id,
     ]
+    # Check Kaggle input dataset mounts if running on Kaggle
+    kaggle_input = Path("/kaggle/input")
+    if kaggle_input.exists():
+        candidates.extend([
+            kaggle_input / original_image_id,
+            kaggle_input / dataset_id / original_image_id,
+            kaggle_input / "coco" / original_image_id,
+            kaggle_input / "val2014" / original_image_id,
+            kaggle_input / "val2017" / original_image_id,
+            kaggle_input / "xmca-task2-smoke-inputs" / "task2_smoke" / "images" / original_image_id,
+        ])
+        for p in kaggle_input.glob(f"**/{original_image_id}"):
+            if p.is_file():
+                return p
+
     for cand in candidates:
         if cand.exists():
             return cand

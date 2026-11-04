@@ -12,10 +12,7 @@ import math
 import numpy as np
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
-
 from src.features.extractor import DiagnosticFeatureVector
-
-
 class BaselineScore(BaseModel):
     """Output score from a baseline detector."""
 
