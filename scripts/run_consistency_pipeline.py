@@ -31,6 +31,17 @@ from src.evaluation.metrics import MetricEvaluator
 from src.baselines.baselines import BaselineEvaluator
 
 
+MODEL_KEY_ALIASES = {
+    "llava": "llava",
+    "llava_1.5_7b": "llava",
+    "qwen2_vl": "qwen2_vl",
+    "qwen2_vl_7b": "qwen2_vl",
+    "internvl": "internvl",
+    "internvl2_2b": "internvl",
+    "internvl2_8b": "internvl",
+}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="XMCA-Net Consistency Pipeline Runner")
     parser.add_argument("--tier", type=int, default=100, choices=[100, 300, 600, 1000],
@@ -61,10 +72,19 @@ def main():
     print("=" * 65)
 
     # 1. Resolve generations file
+    canonical_model = MODEL_KEY_ALIASES.get(args.model, args.model)
     gen_file = args.generations_file
     if gen_file is None:
-        gen_file = f"artifacts/generations/full_benchmark/tier_{args.tier}/{args.model}/generation_records.jsonl"
-    gen_path = Path(gen_file)
+        cand1 = Path(f"artifacts/generations/full_benchmark/tier_{args.tier}/{args.model}/generation_records.jsonl")
+        cand2 = Path(f"artifacts/generations/full_benchmark/tier_{args.tier}/{canonical_model}/generation_records.jsonl")
+        if cand1.exists():
+            gen_path = cand1
+        elif cand2.exists():
+            gen_path = cand2
+        else:
+            gen_path = cand1
+    else:
+        gen_path = Path(gen_file)
 
     if not gen_path.exists():
         print(f"Generation records file not found at: {gen_path}")
@@ -170,6 +190,9 @@ def main():
     features_df = feat_extractor.to_dataframe(feature_vectors)
     feat_parquet_path = features_dir / f"tier_{args.tier}_{args.model}_features.parquet"
     features_df.to_parquet(feat_parquet_path, index=False)
+    if canonical_model != args.model:
+        canonical_parquet_path = features_dir / f"tier_{args.tier}_{canonical_model}_features.parquet"
+        features_df.to_parquet(canonical_parquet_path, index=False)
     print(f"\nSaved {len(features_df)} diagnostic feature vectors to {feat_parquet_path}.")
 
     # 5. Strict Partitioning: Train vs Held-Out Test

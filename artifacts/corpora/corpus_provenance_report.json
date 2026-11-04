@@ -1,0 +1,20 @@
+{
+  "total_documents": 57103,
+  "split_counts": {
+    "train_only": 51168,
+    "eval_held_out": 5935
+  },
+  "origin_counts": {
+    "a_okvqa": 54603,
+    "infoseek": 2500
+  },
+  "parquet_path": "artifacts/corpora/authentic_knowledge_corpus.parquet",
+  "non_rag_datasets": [
+    "pope",
+    "faithscore"
+  ],
+  "leakage_protection": {
+    "train_only_isolation_enforced": true,
+    "held_out_validation_isolation_enforced": true
+  }
+}

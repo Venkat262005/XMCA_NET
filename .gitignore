@@ -62,6 +62,8 @@ data/images/*
 # Artifact caches & generated outputs (keep directory structure via .gitkeep)
 artifacts/corpora/*
 !artifacts/corpora/.gitkeep
+!artifacts/corpora/authentic_knowledge_corpus.parquet
+!artifacts/corpora/corpus_provenance_report.json
 artifacts/generations/*
 !artifacts/generations/.gitkeep
 artifacts/features/*

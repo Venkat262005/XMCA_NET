@@ -141,3 +141,4 @@ def test_end_to_end_neural_combiner_pipeline():
     attr_pred = attr_head.attribute_cause(train_vecs[1], pred_hallucination, combiner=combiner)
     assert attr_pred.attributed_cause in ["perception", "retrieval", "utilization"]
     assert len(attr_pred.attribution_probabilities) == 3
+
