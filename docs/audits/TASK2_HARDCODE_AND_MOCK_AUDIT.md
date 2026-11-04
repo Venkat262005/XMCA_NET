@@ -62,3 +62,4 @@ In `scripts/kaggle_vlm_smoke_test.py`:
 
 **VERDICT**: **PASS**  
 No hardcoded responses, fabricated latencies, or fake probability scores exist in the production source files or research artifact paths. Mocks are restricted entirely to test assertions.
+

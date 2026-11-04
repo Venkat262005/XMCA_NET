@@ -62,3 +62,4 @@
 ## 4. Next Step
 
 The code is forensically sound, free of fake data, and ready for deployment to **Kaggle GPU T4 × 2** via [`notebooks/XMCA_TASK2_VLM_SMOKE_TEST.ipynb`](file:///Users/ketharajupallivenkat/Desktop/XMCA_NET_SRC/notebooks/XMCA_TASK2_VLM_SMOKE_TEST.ipynb).
+

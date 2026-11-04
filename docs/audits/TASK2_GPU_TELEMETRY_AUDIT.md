@@ -84,3 +84,4 @@ All metrics reported by `src/generation/telemetry.py` were audited to confirm th
 
 **VERDICT**: **PASS**  
 All telemetry functions are wired to live PyTorch CUDA APIs and system `nvidia-smi` utilities. No constant or synthetic memory values exist. Real hardware execution remains **NOT VERIFIABLE** until executed on Kaggle dual-T4 GPUs.
+

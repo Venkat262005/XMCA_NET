@@ -54,3 +54,4 @@ All 6 smoke test probes were verified against physical disk files:
 
 **VERDICT**: **PASS**  
 All static code quality checks pass. Imports, AST trees, dependencies, and probe lineage are valid and uncompromised.
+

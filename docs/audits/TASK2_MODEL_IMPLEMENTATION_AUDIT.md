@@ -84,3 +84,4 @@
 | **Qwen2-VL 7B** | `Qwen2VLForConditionalGeneration` | `AutoProcessor` | Dynamic resolution tokens | `device_map="auto"`, max 14GiB/GPU | PASS |
 | **InternVL2 2B** | `InternVLChatModel` (`AutoModel`) | `AutoTokenizer` | Dynamic 448x448 patches + thumbnail | `device_map="auto"` | PASS |
 | **InternVL2 8B** | `InternVLChatModel` (`AutoModel`) | `AutoTokenizer` | Dynamic 448x448 patches + thumbnail | Custom layer map across GPU 0 & 1 | PASS |
+

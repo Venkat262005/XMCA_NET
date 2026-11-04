@@ -84,3 +84,4 @@ A comprehensive forensic audit was conducted on the VLM adapter architecture and
 | GPU Telemetry | `src/generation/telemetry.py` | PyTorch memory accounting | Lines 76-94 | PASS | Live `allocated`, `reserved`, and peak calls |
 | Dry-Run Separation | `scripts/kaggle_vlm_smoke_test.py` | Isolation from research dirs | Lines 308-314 | PASS | Dry-run writes to `tests/fixtures/task2_dry_run/` |
 | Research Directory | `artifacts/generations/task2_verified/` | No simulated records | Empty (`.gitkeep` only) | PASS | Zero contamination |
+

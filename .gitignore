@@ -75,3 +75,4 @@ artifacts/models/*
 htmlcov/
 *.log
 
+kaggle_upload/
