@@ -30,6 +30,7 @@ from src.combiner.combiner import XMCADetectionCombiner, XMCAAttributionHead
 from src.evaluation.metrics import MetricEvaluator
 from src.baselines.baselines import BaselineEvaluator
 from src.data.loader import AuthenticDatasetLoader
+from scripts.run_full_benchmark_generation import locate_image
 
 
 MODEL_KEY_ALIASES = {
@@ -211,6 +212,14 @@ def main():
         dataset_id = rec.get("dataset_id", "unknown").lower()
         image_id = rec.get("image_id", "")
         image_path = rec.get("image_path", None)
+        if image_path:
+            p = Path(image_path)
+            if not p.exists():
+                found_path = locate_image(Path("data/images"), dataset_id, image_id or p.name)
+                image_path = str(found_path) if found_path else None
+        elif image_id:
+            found_path = locate_image(Path("data/images"), dataset_id, image_id)
+            image_path = str(found_path) if found_path else None
         question = rec.get("question", "")
         generated_text = rec.get("generated_text", "")
 

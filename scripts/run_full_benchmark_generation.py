@@ -65,11 +65,12 @@ def get_tier_cohort(cohort_manifest_path: str, tier: int) -> pd.DataFrame:
 
 
 def locate_image(images_dir: Path, dataset_id: str, original_image_id: str) -> Optional[Path]:
-    """Locate physical image on disk across candidate subdirectories."""
+    """Locate physical image on disk across candidate subdirectories, or auto-fetch authentic COCO image."""
     candidates = [
         images_dir / original_image_id,
         images_dir / dataset_id / original_image_id,
         images_dir / "coco" / original_image_id,
+        images_dir / "cache" / original_image_id,
         images_dir / "preflight" / original_image_id,
         images_dir / "preflight" / dataset_id / original_image_id,
         images_dir / "val2014" / original_image_id,
@@ -94,6 +95,33 @@ def locate_image(images_dir: Path, dataset_id: str, original_image_id: str) -> O
     for cand in candidates:
         if cand.exists():
             return cand
+
+    # On-demand download from official COCO repository for POPE, FaithScore, and A-OKVQA
+    if "COCO_" in original_image_id or original_image_id.endswith(".jpg"):
+        clean_name = original_image_id
+        cache_dir = images_dir / "cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_target = cache_dir / clean_name
+        if cached_target.exists():
+            return cached_target
+
+        folders = ["val2014", "val2017", "train2017"]
+        test_names = [clean_name]
+        for folder in folders:
+            if not clean_name.startswith("COCO_"):
+                test_names.append(f"COCO_{folder}_{clean_name}")
+            for t_name in test_names:
+                url = f"http://images.cocodataset.org/{folder}/{t_name}"
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=8) as response:
+                        if response.status == 200:
+                            cached_target.write_bytes(response.read())
+                            return cached_target
+                except Exception:
+                    pass
+
     return None
 
 

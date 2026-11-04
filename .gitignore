@@ -56,8 +56,15 @@ kaggle.json
 # Data directories (keep directory structure via .gitkeep)
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/pope_coco_adversarial.json
+!data/raw/pope_coco_popular.json
+!data/raw/pope_coco_random.json
+!data/raw/faithscore_annotations.jsonl
+!data/raw/aokvqa_v1p0_val.json
+!data/raw/infoseek_val.jsonl
 data/images/*
 !data/images/.gitkeep
+!data/images/preflight/
 
 # Artifact caches & generated outputs (keep directory structure via .gitkeep)
 artifacts/corpora/*
