@@ -172,6 +172,23 @@ class InternVLAdapter(BaseVLMAdapter):
         if gpu_count == 1:
             max_memory = {0: self.config.max_memory_per_gpu}
 
+        # Guard against transformers 4.49+ / 5.0+ missing all_tied_weights_keys on custom remote models
+        from transformers import PreTrainedModel
+        import torch.nn as nn
+
+        def _get_tied_keys(mod):
+            if hasattr(mod, "_all_tied_weights_keys"):
+                return mod._all_tied_weights_keys
+            return getattr(mod, "_tied_weights_keys", {})
+
+        def _set_tied_keys(mod, val):
+            mod._all_tied_weights_keys = val
+
+        if not hasattr(PreTrainedModel, "all_tied_weights_keys"):
+            PreTrainedModel.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+        if not hasattr(nn.Module, "all_tied_weights_keys"):
+            nn.Module.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+
         self.model = AutoModel.from_pretrained(
             self.model_id,
             revision=self.revision,
