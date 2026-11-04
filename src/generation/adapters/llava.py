@@ -36,7 +36,12 @@ class LLaVAAdapter(BaseVLMAdapter):
         self.processor = AutoProcessor.from_pretrained(
             self.model_id,
             revision=self.revision,
+            patch_size=14,
         )
+        if getattr(self.processor, "patch_size", None) is None:
+            self.processor.patch_size = 14
+        if hasattr(self.processor, "image_processor") and getattr(self.processor.image_processor, "patch_size", None) is None:
+            self.processor.image_processor.patch_size = 14
 
         try:
             self.model = LlavaForConditionalGeneration.from_pretrained(
@@ -108,6 +113,12 @@ class LLaVAAdapter(BaseVLMAdapter):
 
         pil_image = self._resolve_image(image)
         formatted_prompt = self.format_prompt(prompt)
+
+        # Guard against upstream transformers LlavaProcessor patch_size None bug
+        if getattr(self.processor, "patch_size", None) is None:
+            self.processor.patch_size = 14
+        if hasattr(self.processor, "image_processor") and getattr(self.processor.image_processor, "patch_size", None) is None:
+            self.processor.image_processor.patch_size = 14
 
         inputs = self.processor(
             text=formatted_prompt,
