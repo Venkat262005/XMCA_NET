@@ -16,6 +16,10 @@ import json
 import time
 import argparse
 from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from typing import List, Dict, Any, Optional
 import pandas as pd
 from PIL import Image

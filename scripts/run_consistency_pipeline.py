@@ -11,9 +11,14 @@ Executes Stages 5 through 10 of the research pipeline:
 """
 
 import os
+import sys
 import json
 import argparse
 from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 import numpy as np

@@ -8,8 +8,14 @@ Extracts authentic evidence documents from:
 Saves authentic_knowledge_corpus.parquet and corpus_provenance_report.json.
 """
 
+import os
+import sys
 import json
 from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from src.retrieval.corpus import CorpusBuilder, compute_sha256
 
 
