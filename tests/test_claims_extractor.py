@@ -30,3 +30,4 @@ def test_claim_extractor_empty_string():
     res = extractor.extract_claims("sample_03", "")
     assert res.total_claims == 0
     assert len(res.claims) == 0
+

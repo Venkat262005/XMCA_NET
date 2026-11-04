@@ -160,3 +160,4 @@ def test_metric_evaluator():
     pred_causes = ["perception", "retrieval", "retrieval", "utilization"]
     attr_metrics = evaluator.compute_attribution_accuracy(true_causes, pred_causes)
     assert attr_metrics["overall_attribution_accuracy"] == 0.75
+

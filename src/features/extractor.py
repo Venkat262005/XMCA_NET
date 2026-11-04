@@ -151,3 +151,4 @@ class FeatureExtractor:
     def to_dataframe(self, vectors: List[DiagnosticFeatureVector]) -> pd.DataFrame:
         """Convert a list of vectors to a pandas DataFrame."""
         return pd.DataFrame([v.model_dump() for v in vectors])
+

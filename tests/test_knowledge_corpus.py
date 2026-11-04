@@ -83,3 +83,4 @@ def test_retriever_strictly_blocks_synthetic_rag_for_pope_and_faithscore():
     assert res_fs.is_applicable is False
     assert res_fs.missingness_mask == 1.0
     assert len(res_fs.retrieved_passages) == 0
+

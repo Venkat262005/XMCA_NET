@@ -153,3 +153,4 @@ def test_utilization_estimator_su_calculation():
     assert su_res.missingness_mask == 0.0
     assert su_res.entailment_ratio == 1.0
     assert su_res.su_score >= 0.7
+

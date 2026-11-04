@@ -308,3 +308,4 @@ class CorpusBuilder:
 
         corpus.build_index()
         return corpus
+
