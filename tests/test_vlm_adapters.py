@@ -128,6 +128,24 @@ def test_strict_environment_blocks_local_mac_load():
         llava.load()
 
 
+def test_adapters_load_code_path_and_imports():
+    """Verify that all adapters can execute the load() method without import errors."""
+    models_to_test = ["llava", "qwen2_vl", "internvl"]
+    for m in models_to_test:
+        adapter = get_adapter(m)
+        mod_name = "qwen2_vl" if m == "qwen2_vl" else m
+        with patch(f"src.generation.adapters.{mod_name}.enforce_strict_environment"), \
+             patch("transformers.AutoProcessor.from_pretrained", return_value=MagicMock()), \
+             patch("transformers.AutoTokenizer.from_pretrained", return_value=MagicMock()), \
+             patch("transformers.LlavaForConditionalGeneration.from_pretrained", return_value=MagicMock()), \
+             patch("transformers.Qwen2VLForConditionalGeneration.from_pretrained", return_value=MagicMock()), \
+             patch("transformers.AutoModel.from_pretrained", return_value=MagicMock()):
+            adapter.load()
+            assert adapter.is_loaded
+            adapter.unload()
+            assert not adapter.is_loaded
+
+
 def test_infoseek_unmaterialized_image_guard():
     app_cfg = load_app_config()
     models_cfg = load_models_config()

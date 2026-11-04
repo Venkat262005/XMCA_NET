@@ -21,7 +21,11 @@ class LLaVAAdapter(BaseVLMAdapter):
         enforce_strict_environment(self.app_config)
 
         import torch
-        from transformers import AutoProcessor, AutoModelForVision2Seq, LlavaForConditionalGeneration
+        from transformers import AutoProcessor, LlavaForConditionalGeneration
+        try:
+            from transformers import AutoModelForImageTextToText
+        except ImportError:
+            AutoModelForImageTextToText = None
 
         dtype = torch.float16 if self.dtype_str == "float16" else torch.float32
 
@@ -44,15 +48,17 @@ class LLaVAAdapter(BaseVLMAdapter):
                 low_cpu_mem_usage=True,
             )
         except Exception:
-            # Fallback to generic AutoModelForVision2Seq (e.g. for Llava-OneVision)
-            self.model = AutoModelForVision2Seq.from_pretrained(
-                self.model_id,
-                revision=self.revision,
-                torch_dtype=dtype,
-                device_map=self.config.device_map,
-                max_memory=max_memory,
-                low_cpu_mem_usage=True,
-            )
+            if AutoModelForImageTextToText is not None:
+                self.model = AutoModelForImageTextToText.from_pretrained(
+                    self.model_id,
+                    revision=self.revision,
+                    torch_dtype=dtype,
+                    device_map=self.config.device_map,
+                    max_memory=max_memory,
+                    low_cpu_mem_usage=True,
+                )
+            else:
+                raise
 
         self.model.eval()
         self._is_loaded = True
