@@ -232,12 +232,15 @@ def run_model_generation(
             else:
                 out = orchestrator.run_inference_sample(
                     model_key=canonical_key,
+                    sample_id=sample_id,
+                    dataset=dataset_id,
+                    question=question,
+                    image_path=image_path,
                     image=img,
-                    prompt=question,
                     max_new_tokens=128,
                     temperature=0.0,
                 )
-                latency_sec = out.latency_ms / 1000.0
+                latency_sec = getattr(out, "latency_ms", out.get("latency_ms", 10.0)) / 1000.0
 
             # Telemetry snapshot
             cuda_vram = get_cuda_memory_snapshot()

@@ -236,6 +236,51 @@ def test_telemetry_functions():
     assert "after_unload" in d
 
 
+def test_orchestrator_run_inference_sample_signature_and_record_access():
+    """Verify that run_inference_sample accepts both full sample signatures and flexible kwargs."""
+    app_cfg = load_app_config()
+    models_cfg = load_models_config()
+    orch = GenerationOrchestrator(app_cfg, models_cfg)
+
+    gen_out = VLMGenerationOutput(
+        model_key="llava",
+        model_id="llava-hf/llava-1.5-7b-hf",
+        revision="a272c74",
+        prompt="Is there a dog?",
+        generated_text="Yes, there is a dog.",
+        latency_ms=25.0,
+        input_tokens=10,
+        output_tokens=6,
+        finish_reason="stop",
+    )
+    orch.active_adapter = MagicMock()
+    orch.active_adapter.model_key = "llava"
+    orch.active_adapter.generate.return_value = gen_out
+
+    # Full call
+    rec1 = orch.run_inference_sample(
+        model_key="llava",
+        sample_id="pope_sample_1",
+        dataset="pope",
+        question="Is there a dog?",
+        image_path="data/images/preflight/pope/COCO_val2014_000000007320.jpg",
+        image=Image.new("RGB", (100, 100)),
+    )
+    assert rec1["generated_answer"] == "Yes, there is a dog."
+    assert rec1.generated_text == "Yes, there is a dog."
+    assert rec1.output_tokens == 6
+    assert rec1.latency_ms == 25.0
+
+    # Flexible/keyword call
+    rec2 = orch.run_inference_sample(
+        model_key="llava",
+        image=Image.new("RGB", (100, 100)),
+        prompt="Is there a dog?",
+    )
+    assert rec2["generated_answer"] == "Yes, there is a dog."
+    assert rec2.generated_text == "Yes, there is a dog."
+
+
 def test_authentic_probe_definitions():
     from scripts.kaggle_vlm_smoke_test import AUTHENTIC_PROBES, verify_file_sha256
     assert len(AUTHENTIC_PROBES) == 6

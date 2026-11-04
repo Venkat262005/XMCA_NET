@@ -15,6 +15,21 @@ from src.utils.config import AppConfig, ModelsConfig, load_app_config, load_mode
 from src.utils.environment import enforce_strict_environment
 
 
+class GenerationSampleRecord(dict):
+    """Dictionary supporting both dict item and object attribute access."""
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError:
+            if name == "generated_text":
+                return self.get("generated_answer", "")
+            raise AttributeError(f"'GenerationSampleRecord' has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
+
+
 class GenerationOrchestrator:
     """Manages sequential VLM model loading, batch/sample inference, and artifact persistence."""
 
@@ -50,13 +65,14 @@ class GenerationOrchestrator:
     def run_inference_sample(
         self,
         model_key: str,
-        sample_id: str,
-        dataset: str,
-        question: str,
-        image_path: Union[str, Path],
+        sample_id: str = "sample",
+        dataset: str = "general",
+        question: str = "",
+        image_path: Optional[Union[str, Path]] = None,
         image: Optional[Image.Image] = None,
+        prompt: Optional[str] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> GenerationSampleRecord:
         """Execute inference on a single verified sample under strict safety guards.
         
         Guards:
@@ -64,12 +80,15 @@ class GenerationOrchestrator:
           - Missing image file raises FileNotFoundError.
           - Execution must satisfy strict environment conditions.
         """
+        eff_question = question or prompt or ""
+        eff_image_path = image_path or "in_memory_image"
+
         # InfoSeek safeguard
         if dataset == "infoseek":
-            img_p = Path(image_path)
-            if not img_p.exists() or img_p.stat().st_size == 0:
+            img_p = Path(eff_image_path)
+            if not img_p.exists() or (img_p.is_file() and img_p.stat().st_size == 0):
                 raise RuntimeError(
-                    f"InfoSeek image-conditioned inference is BLOCKED: Image '{image_path}' "
+                    f"InfoSeek image-conditioned inference is BLOCKED: Image '{eff_image_path}' "
                     "is not materialized. Gated OVEN access must be resolved on Kaggle via HF_TOKEN."
                 )
 
@@ -78,28 +97,29 @@ class GenerationOrchestrator:
 
         pil_img = image
         if pil_img is None:
-            pil_img = Path(image_path)
+            pil_img = Path(eff_image_path)
 
         output: VLMGenerationOutput = self.active_adapter.generate(
             image=pil_img,
-            prompt=question,
+            prompt=eff_question,
             **kwargs,
         )
 
-        record = {
+        record = GenerationSampleRecord({
             "sample_id": sample_id,
             "dataset": dataset,
             "model_key": model_key,
             "model_id": output.model_id,
             "revision": output.revision,
-            "question": question,
-            "image_path": str(image_path),
+            "question": eff_question,
+            "image_path": str(eff_image_path),
             "generated_answer": output.generated_text,
+            "generated_text": output.generated_text,
             "input_tokens": output.input_tokens,
             "output_tokens": output.output_tokens,
             "latency_ms": output.latency_ms,
             "device_memory_gib": output.device_memory_gib,
             "finish_reason": output.finish_reason,
             "metadata": output.metadata,
-        }
+        })
         return record
