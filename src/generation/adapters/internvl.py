@@ -147,6 +147,20 @@ class InternVLAdapter(BaseVLMAdapter):
         else:
             device_map = self.config.device_map
 
+        # Guard against upstream SentencePiece >= 0.2.2 regression that breaks InternLM2 tokenizers
+        try:
+            import sentencepiece
+            sp_ver = getattr(sentencepiece, "__version__", "")
+            if sp_ver.startswith("0.2.2") or (sp_ver and tuple(map(int, sp_ver.split(".")[:3])) >= (0, 2, 2)):
+                import subprocess
+                print(f"Warning: SentencePiece version {sp_ver} detected. InternVL requires sentencepiece < 0.2.2.")
+                print("Automatically adjusting to sentencepiece<0.2.2...")
+                subprocess.run([sys.executable, "-m", "pip", "install", "-q", "sentencepiece<0.2.2"], check=True)
+                import importlib
+                importlib.reload(sentencepiece)
+        except Exception:
+            pass
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_id,
             revision=self.revision,
