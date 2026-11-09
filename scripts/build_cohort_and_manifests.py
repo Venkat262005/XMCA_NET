@@ -114,7 +114,7 @@ def main():
     pope_all = loader.load_pope("all")
     faith_records = loader.load_faithscore(deduplicate=True)
     aokvqa_records = loader.load_aokvqa()
-    infoseek_records = loader.load_infoseek(max_records=10000)
+    infoseek_records = loader.load_infoseek(max_records=25000)
 
     pope_adv = [r for r in pope_all if r.official_label_fields.get("sampling_strategy") == "adversarial"]
     pope_pop = [r for r in pope_all if r.official_label_fields.get("sampling_strategy") == "popular"]
@@ -167,8 +167,20 @@ def main():
     # A-OKVQA: 1,000 sampled
     cohort_aokvqa = random.sample(aokvqa_records, 1000)
 
-    # InfoSeek: 1,000 sampled
-    cohort_infoseek = random.sample(infoseek_records, 1000)
+    # InfoSeek: 1,000 sampled from verified records whose authentic images exist in the validation image archive
+    berag_manifest_path = MANIFEST_DIR / "infoseek_berag_manifest.json"
+    if berag_manifest_path.exists():
+        with open(berag_manifest_path) as f:
+            berag_data = json.load(f)
+        berag_stems = set(Path(x).stem for x in berag_data.get("archive_members", []))
+        verified_infoseek = [r for r in infoseek_records if r.original_image_id in berag_stems]
+        if len(verified_infoseek) >= 1000:
+            print(f"InfoSeek: Sampling 1,000 records from {len(verified_infoseek)} verified records with downloadable images.")
+            cohort_infoseek = random.sample(verified_infoseek, 1000)
+        else:
+            cohort_infoseek = random.sample(infoseek_records, 1000)
+    else:
+        cohort_infoseek = random.sample(infoseek_records, 1000)
 
     # Build cohort_manifest.parquet
     cohort_rows = []

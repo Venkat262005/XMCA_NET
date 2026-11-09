@@ -1,6 +1,6 @@
 {
-  "audit_timestamp": "2026-11-04T01:17:57.746984",
-  "total_unique_physical_images": 2379,
+  "audit_timestamp": "2026-11-10T00:03:15.742686",
+  "total_unique_physical_images": 2077,
   "multi_dataset_physical_images": 25,
   "split_conflicts_detected": 24,
   "pope_cohort_strategies": {

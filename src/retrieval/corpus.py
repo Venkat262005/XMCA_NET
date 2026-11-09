@@ -190,7 +190,7 @@ class CorpusBuilder:
         aokvqa_train_path: Path,
         aokvqa_val_path: Optional[Path] = None,
         infoseek_val_path: Optional[Path] = None,
-        max_infoseek_records: int = 2000,
+        max_infoseek_records: Optional[int] = None,
     ) -> AuthenticKnowledgeCorpus:
         """Constructs authentic corpus from authentic files only."""
         corpus = AuthenticKnowledgeCorpus()
@@ -303,7 +303,7 @@ class CorpusBuilder:
                     )
                     corpus.add_document(doc)
                     count += 1
-                    if count >= max_infoseek_records:
+                    if max_infoseek_records is not None and count >= max_infoseek_records:
                         break
 
         corpus.build_index()

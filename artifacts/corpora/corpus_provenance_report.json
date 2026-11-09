@@ -1,12 +1,12 @@
 {
-  "total_documents": 57103,
+  "total_documents": 128223,
   "split_counts": {
     "train_only": 51168,
-    "eval_held_out": 5935
+    "eval_held_out": 77055
   },
   "origin_counts": {
     "a_okvqa": 54603,
-    "infoseek": 2500
+    "infoseek": 73620
   },
   "parquet_path": "artifacts/corpora/authentic_knowledge_corpus.parquet",
   "non_rag_datasets": [

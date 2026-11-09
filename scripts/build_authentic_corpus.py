@@ -29,7 +29,7 @@ def main():
         aokvqa_train_path=raw_dir / "aokvqa_v1p0_train.json",
         aokvqa_val_path=raw_dir / "aokvqa_v1p0_val.json",
         infoseek_val_path=raw_dir / "infoseek_val.jsonl",
-        max_infoseek_records=2500,
+        max_infoseek_records=None,
     )
 
     parquet_path = output_dir / "authentic_knowledge_corpus.parquet"
