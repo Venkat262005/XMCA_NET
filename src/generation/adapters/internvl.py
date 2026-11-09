@@ -7,6 +7,7 @@ and standard chat interfaces.
 
 import math
 from pathlib import Path
+import sys
 import time
 from typing import Dict, Any, Optional, Union, List, Tuple
 from PIL import Image
@@ -214,7 +215,9 @@ class InternVLAdapter(BaseVLMAdapter):
                             target_cls.__bases__ = (GenerationMixin,) + target_cls.__bases__
 
             for target in [self.model, getattr(self.model, "language_model", None)]:
-                if target is not None:
+                if target is not None and not isinstance(target, (nn.Module,)):
+                    continue
+                if target is not None and "Mock" not in target.__class__.__name__:
                     cls = target.__class__
                     if GenerationMixin not in cls.__bases__:
                         cls.__bases__ = (GenerationMixin,) + cls.__bases__

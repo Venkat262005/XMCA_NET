@@ -148,8 +148,57 @@ def test_adapters_load_code_path_and_imports():
              patch("transformers.AutoModel.from_pretrained", return_value=MagicMock()):
             adapter.load()
             assert adapter.is_loaded
+            if m == "llava":
+                assert adapter.processor.num_additional_image_tokens == 1
             adapter.unload()
             assert not adapter.is_loaded
+
+
+def test_llava_image_tokens_alignment_guard():
+    """Verify that LlavaAdapter aligns image token counts if processor produces 575 instead of 576."""
+    import torch
+    from unittest.mock import MagicMock, patch
+
+    llava = get_adapter("llava")
+    llava._is_loaded = True
+
+    mock_model = MagicMock()
+    mock_model.device = torch.device("cpu")
+    mock_model.config.image_token_id = 32000
+    mock_model.config.vision_config.patch_size = 14
+    mock_model.config.vision_feature_select_strategy = "default"
+
+    # Simulate model generate returning dummy output
+    mock_model.generate.return_value = torch.tensor([[32000] * 576 + [100, 101]])
+    llava.model = mock_model
+
+    # Mock processor that returns 575 image tokens (simulating Kaggle transformers bug)
+    mock_processor = MagicMock()
+    mock_processor.patch_size = 14
+    mock_processor.vision_feature_select_strategy = "default"
+    mock_processor.num_additional_image_tokens = 0
+    mock_processor.image_token_id = 32000
+    mock_processor.tokenizer.convert_tokens_to_ids.return_value = 32000
+    mock_processor.batch_decode.return_value = ["A test answer"]
+
+    # 575 image tokens + 10 text tokens
+    buggy_input_ids = torch.tensor([[1, 2, 3] + [32000] * 575 + [4, 5]])
+    pixel_values = torch.zeros((1, 3, 336, 336))
+    mock_processor.return_value = {
+        "input_ids": buggy_input_ids,
+        "attention_mask": torch.ones_like(buggy_input_ids),
+        "pixel_values": pixel_values,
+    }
+    llava.processor = mock_processor
+
+    test_img = Image.new("RGB", (336, 336), color="red")
+    out = llava.generate(image=test_img, prompt="What is this?")
+    assert out.generated_text == "A test answer"
+
+    # Verify model.generate was called with exactly 576 image tokens
+    call_kwargs = mock_model.generate.call_args[1]
+    passed_input_ids = call_kwargs["input_ids"]
+    assert (passed_input_ids == 32000).sum().item() == 576
 
 
 def test_infoseek_unmaterialized_image_guard():

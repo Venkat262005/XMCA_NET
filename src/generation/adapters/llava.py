@@ -44,6 +44,8 @@ class LLaVAAdapter(BaseVLMAdapter):
             self.processor.image_processor.patch_size = 14
         if getattr(self.processor, "vision_feature_select_strategy", None) is None:
             self.processor.vision_feature_select_strategy = "default"
+        if getattr(self.processor, "num_additional_image_tokens", 0) == 0:
+            self.processor.num_additional_image_tokens = 1
 
         try:
             self.model = LlavaForConditionalGeneration.from_pretrained(
@@ -66,6 +68,16 @@ class LLaVAAdapter(BaseVLMAdapter):
                 )
             else:
                 raise
+
+        # Synchronize processor attributes with model configuration
+        vision_cfg = getattr(self.model.config, "vision_config", None)
+        patch_sz = getattr(vision_cfg, "patch_size", 14) if vision_cfg is not None else 14
+        self.processor.patch_size = patch_sz
+        if hasattr(self.processor, "image_processor"):
+            self.processor.image_processor.patch_size = patch_sz
+        strat = getattr(self.model.config, "vision_feature_select_strategy", "default")
+        self.processor.vision_feature_select_strategy = strat
+        self.processor.num_additional_image_tokens = 1
 
         self.model.eval()
         self._is_loaded = True
@@ -123,12 +135,64 @@ class LLaVAAdapter(BaseVLMAdapter):
             self.processor.image_processor.patch_size = 14
         if getattr(self.processor, "vision_feature_select_strategy", None) is None:
             self.processor.vision_feature_select_strategy = "default"
+        if getattr(self.processor, "num_additional_image_tokens", 0) == 0:
+            self.processor.num_additional_image_tokens = 1
 
         inputs = self.processor(
             text=formatted_prompt,
             images=pil_image,
             return_tensors="pt",
         )
+
+        # Dynamic token alignment guard: ensure count of <image> tokens in input_ids exactly matches expected features
+        if "pixel_values" in inputs and "input_ids" in inputs:
+            image_token_id = getattr(self.model.config, "image_token_id", None)
+            if image_token_id is None:
+                image_token_id = getattr(self.processor, "image_token_id", None)
+            if image_token_id is None and hasattr(self.processor, "tokenizer"):
+                image_token_id = self.processor.tokenizer.convert_tokens_to_ids("<image>")
+
+            if image_token_id is not None:
+                pv = inputs["pixel_values"]
+                h, w = pv.shape[-2], pv.shape[-1]
+                patch_sz = getattr(self.processor, "patch_size", 14) or 14
+                expected_features = (h // patch_sz) * (w // patch_sz)
+
+                input_ids = inputs["input_ids"]
+                current_tokens = (input_ids == image_token_id).sum().item()
+                if current_tokens != expected_features and current_tokens > 0:
+                    diff = expected_features - current_tokens
+                    new_input_ids = []
+                    new_att_masks = []
+                    has_att = "attention_mask" in inputs
+                    for b in range(input_ids.shape[0]):
+                        b_ids = input_ids[b]
+                        b_att = inputs["attention_mask"][b] if has_att else torch.ones_like(b_ids)
+                        mask = (b_ids == image_token_id)
+                        if not mask.any():
+                            new_input_ids.append(b_ids)
+                            if has_att:
+                                new_att_masks.append(b_att)
+                            continue
+                        indices = mask.nonzero(as_tuple=True)[0]
+                        last_pos = indices[-1].item()
+                        if diff > 0:
+                            insert_tokens = torch.full((diff,), image_token_id, dtype=b_ids.dtype, device=b_ids.device)
+                            insert_att = torch.ones((diff,), dtype=b_att.dtype, device=b_att.device)
+                            fixed_ids = torch.cat([b_ids[:last_pos + 1], insert_tokens, b_ids[last_pos + 1:]])
+                            fixed_att = torch.cat([b_att[:last_pos + 1], insert_att, b_att[last_pos + 1:]])
+                        else:
+                            remove_count = abs(diff)
+                            remove_indices = set(indices[-remove_count:].tolist())
+                            keep_mask = torch.tensor([i not in remove_indices for i in range(len(b_ids))], dtype=torch.bool, device=b_ids.device)
+                            fixed_ids = b_ids[keep_mask]
+                            fixed_att = b_att[keep_mask]
+                        new_input_ids.append(fixed_ids)
+                        if has_att:
+                            new_att_masks.append(fixed_att)
+                    inputs["input_ids"] = torch.stack(new_input_ids)
+                    if has_att:
+                        inputs["attention_mask"] = torch.stack(new_att_masks)
 
         target_device = self.model.device
         inputs = {
