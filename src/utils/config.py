@@ -132,6 +132,23 @@ class ModelsConfig(BaseModel):
         return models
 
     def get_model(self, key: str) -> ModelItemConfig:
+        if key == "internvl2_8b" and "internvl" in self.models:
+            scale_test = self.models["internvl"].alternative_scale_test
+            if scale_test:
+                return ModelItemConfig(
+                    family="InternVL",
+                    role=scale_test.get("role", "scale_experiment"),
+                    model_id=scale_test["model_id"],
+                    revision=scale_test.get("revision", scale_test.get("resolved_full_sha")),
+                    resolved_full_sha=scale_test.get("resolved_full_sha"),
+                    architecture="InternVLChatModel",
+                    dtype=self.models["internvl"].dtype,
+                    device_map="auto",
+                    max_memory_per_gpu="14GiB",
+                    generation_params=self.models["internvl"].generation_params,
+                    multimodal_processor=scale_test["model_id"],
+                    notes=scale_test.get("notes"),
+                )
         if key not in self.models:
             raise KeyError(
                 f"Explicit missing-model error: model '{key}' is not configured in models.yaml. "

@@ -33,7 +33,7 @@ from src.utils.environment import EnvironmentVerificationError
 
 def test_list_available_adapters():
     adapters = list_available_adapters()
-    assert set(adapters) == {"llava", "qwen2_vl", "internvl"}
+    assert set(adapters) == {"llava", "qwen2_vl", "internvl", "internvl2_8b"}
 
 
 def test_adapter_instantiation():
@@ -57,6 +57,12 @@ def test_adapter_instantiation():
     assert internvl.model_id == "OpenGVLab/InternVL2-2B"
     assert internvl.revision == "e4f6747bd20f139e637642c6a058c6bd00b36919"
     assert not internvl.is_loaded
+
+    internvl_8b = get_adapter("internvl2_8b", models_cfg, app_cfg)
+    assert isinstance(internvl_8b, InternVLAdapter)
+    assert internvl_8b.model_id == "OpenGVLab/InternVL2-8B"
+    assert internvl_8b.revision == "6fb9ad6924f69424e57fab2ab061d707688f0296"
+    assert not internvl_8b.is_loaded
 
 
 def test_unknown_adapter_raises_key_error():

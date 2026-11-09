@@ -17,6 +17,7 @@ _ADAPTER_REGISTRY: Dict[str, Type[BaseVLMAdapter]] = {
     "llava": LLaVAAdapter,
     "qwen2_vl": Qwen2VLAdapter,
     "internvl": InternVLAdapter,
+    "internvl2_8b": InternVLAdapter,
 }
 
 

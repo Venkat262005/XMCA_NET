@@ -45,7 +45,7 @@ MODEL_KEY_ALIASES = {
     "qwen2_vl_7b": "qwen2_vl",
     "internvl": "internvl",
     "internvl2_2b": "internvl",
-    "internvl2_8b": "internvl",
+    "internvl2_8b": "internvl2_8b",
 }
 
 

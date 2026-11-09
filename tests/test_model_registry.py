@@ -9,7 +9,7 @@ from src.utils.config import load_models_config, ModelsConfig, ModelItemConfig
 
 def test_model_registry_valid_access():
     cfg = load_models_config(Path("configs/models.yaml"), require_revision=True)
-    for model_name in ["llava", "qwen2_vl", "internvl"]:
+    for model_name in ["llava", "qwen2_vl", "internvl", "internvl2_8b"]:
         model = cfg.get_model(model_name)
         assert isinstance(model, ModelItemConfig)
         assert model.revision is not None

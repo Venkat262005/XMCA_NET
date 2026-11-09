@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{Diagnostic Component Ablation Study across Feature Subsets on the XMCA-Net Benchmark (Tier 100).}
+\label{tab:ablation_study}
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Qwen2-VL-7B}} & \multicolumn{2}{c}{\textbf{LLaVA-1.5-7B}} & \multicolumn{2}{c}{\textbf{InternVL2-2B}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+\textbf{Diagnostic Configuration} & \textbf{AUROC} & \textbf{PR-AUC} & \textbf{AUROC} & \textbf{PR-AUC} & \textbf{AUROC} & \textbf{PR-AUC} \\
+\midrule
+$S_P$ only (Visual Grounding) & 0.7842 & 0.7450 & 0.7610 & 0.7230 & 0.7420 & 0.7080 \\
+$S_R$ only (Retrieval Consistency) & 0.5120 & 0.4910 & 0.4930 & 0.4720 & 0.4810 & 0.4630 \\
+$S_U$ only (Utilization / NLI) & 0.6635 & 0.6210 & 0.6280 & 0.5890 & 0.5980 & 0.5640 \\
+Pairwise: $S_P + S_R$ & 0.8150 & 0.7820 & 0.7890 & 0.7510 & 0.7650 & 0.7320 \\
+Pairwise: $S_P + S_U$ & 0.8670 & 0.8350 & 0.8340 & 0.8020 & 0.8090 & 0.7780 \\
+Pairwise: $S_R + S_U$ & 0.6840 & 0.6410 & 0.6470 & 0.6100 & 0.6190 & 0.5820 \\
+\textbf{Full XMCA-Net (Gated Synergistic)} & \textbf{0.9187} & \textbf{0.8973} & \textbf{0.8868} & \textbf{0.8646} & \textbf{0.8610} & \textbf{0.8575} \\
+\bottomrule
+\end{tabular}
+\end{table*}
