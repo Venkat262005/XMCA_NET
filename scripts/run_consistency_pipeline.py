@@ -479,33 +479,106 @@ def main():
         },
     }
 
-    # Dataset-Level Breakdown
+    # Dataset-Level Breakdown & Fine-Grained Detection Metrics (4 Datasets x Backbones)
     dataset_breakdown = {}
+    per_dataset_metrics = {}
+
     for d_name in ["pope", "faithscore", "a_okvqa", "infoseek"]:
         d_indices = [idx for idx, v in enumerate(eval_target_vectors) if v.dataset_id.lower() == d_name]
         if not d_indices:
             continue
+        d_total = len(d_indices)
         d_preds = [predictions[idx] for idx in d_indices]
         d_attrs = [attributions[idx] for idx in d_indices]
-        d_labels = [eval_target_vectors[idx].ground_truth_label for idx in d_indices if eval_target_vectors[idx].ground_truth_label is not None]
         
-        d_total = len(d_indices)
+        # Ground truth pairs for this dataset
+        d_labeled_pairs = [
+            (eval_target_vectors[idx].ground_truth_label, predictions[idx].hallucination_probability, predictions[idx].predicted_label)
+            for idx in d_indices if eval_target_vectors[idx].ground_truth_label is not None
+        ]
+        
         d_faithful = sum(1 for p in d_preds if p.predicted_label == 0)
         d_halluc = sum(1 for p in d_preds if p.predicted_label == 1)
         d_h_attrs = [a for a, p in zip(d_attrs, d_preds) if p.predicted_label == 1]
-        
-        dataset_breakdown[d_name] = {
+
+        d_gt_labels = [pair[0] for pair in d_labeled_pairs]
+        d_scores = [pair[1] for pair in d_labeled_pairs]
+        d_pred_labels = [pair[2] for pair in d_labeled_pairs]
+
+        d_gt_faithful = sum(1 for y in d_gt_labels if y == 0)
+        d_gt_halluc = sum(1 for y in d_gt_labels if y == 1)
+
+        d_tp = sum(1 for y, p in zip(d_gt_labels, d_pred_labels) if y == 1 and p == 1)
+        d_fp = sum(1 for y, p in zip(d_gt_labels, d_pred_labels) if y == 0 and p == 1)
+        d_fn = sum(1 for y, p in zip(d_gt_labels, d_pred_labels) if y == 1 and p == 0)
+        d_tn = sum(1 for y, p in zip(d_gt_labels, d_pred_labels) if y == 0 and p == 0)
+
+        d_acc = round((d_tp + d_tn) / max(1, len(d_gt_labels)), 4)
+        d_prec = round(d_tp / max(1, d_tp + d_fp), 4)
+        d_rec = round(d_tp / max(1, d_tp + d_fn), 4)
+        d_f1 = round((2 * d_prec * d_rec) / max(1e-7, d_prec + d_rec), 4)
+
+        d_entry = {
+            "dataset_id": d_name,
             "total_samples": d_total,
-            "faithful_count": d_faithful,
-            "faithful_pct": round(d_faithful / max(1, d_total) * 100, 1),
-            "hallucinated_count": d_halluc,
-            "hallucinated_pct": round(d_halluc / max(1, d_total) * 100, 1),
+            "labeled_samples": len(d_gt_labels),
+            "ground_truth_factual": d_gt_faithful,
+            "ground_truth_hallucinated": d_gt_halluc,
+            "ground_truth_hallucination_rate": round(d_gt_halluc / max(1, len(d_gt_labels)) * 100, 2),
+            "predicted_factual": d_faithful,
+            "predicted_hallucinated": d_halluc,
+            "predicted_hallucination_rate": round(d_halluc / max(1, d_total) * 100, 2),
+            "tp": d_tp,
+            "fp": d_fp,
+            "fn": d_fn,
+            "tn": d_tn,
+            "accuracy": d_acc,
+            "precision": d_prec,
+            "recall": d_rec,
+            "f1_score": d_f1,
             "causes": {
                 "perception": sum(1 for a in d_h_attrs if a.attributed_cause == "perception"),
                 "retrieval": sum(1 for a in d_h_attrs if a.attributed_cause == "retrieval"),
                 "utilization": sum(1 for a in d_h_attrs if a.attributed_cause == "utilization"),
                 "unattributed": sum(1 for a in d_h_attrs if a.attributed_cause == "unattributed"),
             }
+        }
+
+        # AUROC, PR-AUC, ECE, Brier
+        if len(d_gt_labels) > 0 and len(set(d_gt_labels)) > 1:
+            d_eval = evaluator.compute_detection_metrics(d_gt_labels, d_scores, threshold=combiner.decision_threshold)
+            d_entry["auroc"] = d_eval.auroc
+            d_entry["pr_auc"] = d_eval.pr_auc
+            d_entry["ece"] = d_eval.ece
+            d_entry["brier_score"] = d_eval.brier_score
+        else:
+            d_entry["auroc"] = 0.5
+            d_entry["pr_auc"] = 0.5
+            d_entry["ece"] = 0.0
+            d_entry["brier_score"] = 0.0
+
+        dataset_breakdown[d_name] = d_entry
+        per_dataset_metrics[d_name] = {
+            "accuracy": d_entry["accuracy"],
+            "f1_score": d_entry["f1_score"],
+            "precision": d_entry["precision"],
+            "recall": d_entry["recall"],
+            "auroc": d_entry["auroc"],
+            "pr_auc": d_entry["pr_auc"],
+            "ece": d_entry["ece"],
+            "brier_score": d_entry["brier_score"],
+            "total_samples": d_total,
+            "labeled_samples": len(d_gt_labels),
+            "ground_truth_factual": d_gt_faithful,
+            "ground_truth_hallucinated": d_gt_halluc,
+            "ground_truth_hallucination_rate": d_entry["ground_truth_hallucination_rate"],
+            "predicted_factual": d_faithful,
+            "predicted_hallucinated": d_halluc,
+            "predicted_hallucination_rate": d_entry["predicted_hallucination_rate"],
+            "tp": d_tp,
+            "fp": d_fp,
+            "fn": d_fn,
+            "tn": d_tn,
         }
 
     report = {
@@ -537,6 +610,7 @@ def main():
         "hallucination_attribution_breakdown": attribution_breakdown,
         "cohort_classification_distribution": overall_cohort_distribution,
         "dataset_breakdown": dataset_breakdown,
+        "per_dataset_metrics": per_dataset_metrics,
         # Backward-compatible distribution dictionary
         "attribution_distribution": {
             "perception": cause_perc,
@@ -567,9 +641,11 @@ def main():
     print(f"   True Negatives  (TN): {tn:<6} | False Negatives (FN): {fn:<6}")
     print(f"   Accuracy:  {acc:.4f} | Precision: {prec:.4f} | Recall: {rec:.4f} | F1: {f1:.4f}")
 
+    overall_metrics = {}
     if len(eval_labels) > 0 and len(set(eval_labels)) > 1:
         metrics = evaluator.compute_detection_metrics(eval_labels, eval_scores)
-        report["detection_metrics"] = metrics.model_dump()
+        overall_metrics = metrics.model_dump()
+        report["detection_metrics"] = overall_metrics
         print(f"   AUROC:     {metrics.auroc:.4f}")
         print(f"   PR-AUC:    {metrics.pr_auc:.4f}")
         print(f"   ECE:       {metrics.ece:.4f}")
@@ -605,13 +681,29 @@ def main():
     print(f"   - Unattributed / Reasoning Error:     {cause_unattr:>5} ({un_pct_t:.1f}%)")
     print(f"   Total Evaluated Samples:              {total_eval:>5} (100.0%)")
 
-    print("\n5. Per-Dataset Breakdown:")
-    for d_name, d_info in dataset_breakdown.items():
-        print(f"   [{d_name.upper()} - {d_info['total_samples']} samples]")
-        print(f"     Faithful:     {d_info['faithful_count']} ({d_info['faithful_pct']}%)")
-        print(f"     Hallucinated: {d_info['hallucinated_count']} ({d_info['hallucinated_pct']}%) -> "
-              f"P:{d_info['causes']['perception']}, R:{d_info['causes']['retrieval']}, "
-              f"U:{d_info['causes']['utilization']}, Unattr:{d_info['causes']['unattributed']}")
+    print("\n5. Fine-Grained Dataset-Wise Detection Performance Matrix:")
+    print("   " + "=" * 80)
+    print(f"   {'Dataset':<12} {'Samples':<8} {'Accuracy':<9} {'F1-Score':<9} {'AUROC':<8} {'PR-AUC':<8} {'ECE':<8} {'Brier'}")
+    print("   " + "-" * 80)
+    for d_name in ["pope", "faithscore", "a_okvqa", "infoseek"]:
+        if d_name in dataset_breakdown:
+            d = dataset_breakdown[d_name]
+            print(f"   {d_name.upper():<12} {d['total_samples']:<8} {d['accuracy']:<9.4f} {d['f1_score']:<9.4f} {d['auroc']:<8.4f} {d['pr_auc']:<8.4f} {d['ece']:<8.4f} {d['brier_score']:.4f}")
+    print("   " + "-" * 80)
+    ov_auroc = overall_metrics.get("auroc", 0.0)
+    ov_prauc = overall_metrics.get("pr_auc", 0.0)
+    ov_ece = overall_metrics.get("ece", 0.0)
+    ov_brier = overall_metrics.get("brier_score", 0.0)
+    print(f"   {'OVERALL':<12} {total_eval:<8} {acc:<9.4f} {f1:<9.4f} {ov_auroc:<8.4f} {ov_prauc:<8.4f} {ov_ece:<8.4f} {ov_brier:.4f}")
+    print("   " + "=" * 80)
+
+    print("\n6. Dataset-Wise Factual vs. Hallucinated Counts & Root Causes:")
+    for d_name in ["pope", "faithscore", "a_okvqa", "infoseek"]:
+        if d_name in dataset_breakdown:
+            d = dataset_breakdown[d_name]
+            print(f"   [{d_name.upper()}] Samples: {d['total_samples']} | GT Factual: {d['ground_truth_factual']} ({100-d['ground_truth_hallucination_rate']:.1f}%) | GT Halluc: {d['ground_truth_hallucinated']} ({d['ground_truth_hallucination_rate']:.1f}%)")
+            print(f"           Predicted Factual: {d['predicted_factual']} | Predicted Halluc: {d['predicted_hallucinated']} (TP={d['tp']}, FP={d['fp']}, FN={d['fn']}, TN={d['tn']})")
+            print(f"           Attribution -> Perception: {d['causes']['perception']}, Retrieval: {d['causes']['retrieval']}, Utilization: {d['causes']['utilization']}, Unattr: {d['causes']['unattributed']}")
 
     # Save comprehensive report
     report_file = output_dir / f"tier_{args.tier}_{args.model}_evaluation_report.json"
