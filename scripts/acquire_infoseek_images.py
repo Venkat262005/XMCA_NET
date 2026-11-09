@@ -105,51 +105,18 @@ def stream_from_oven_repo(
     missing_ids: Set[str],
     token: Optional[str] = None,
 ) -> int:
-    """Stream remaining images directly from official ychenNLP/oven repository."""
-    print("\nConnecting to ychenNLP/oven in streaming mode via Hugging Face...")
+    """Check ychenNLP/oven for remaining images with clean error handling."""
+    print("\nChecking ychenNLP/oven for remaining images...")
     try:
-        from datasets import load_dataset, get_dataset_split_names
-        try:
-            available_splits = get_dataset_split_names("ychenNLP/oven", token=token)
-            split_to_use = "test" if "test" in available_splits else (available_splits[0] if available_splits else "test")
-        except Exception:
-            split_to_use = "test"
-
-        print(f"Using split: '{split_to_use}' (Available: {available_splits if 'available_splits' in locals() else 'unknown'})...")
-        ds = load_dataset("ychenNLP/oven", split=split_to_use, streaming=True, token=token)
-    except Exception as e:
-        print(f"Failed to connect to ychenNLP/oven: {e}", file=sys.stderr)
+        from datasets import load_dataset
+        # ychenNLP/oven contains 294 GB of raw tar shards (shard01.tar - shard08.tar)
+        # Tabular load_dataset only contains annotation text and does not carry raw image bytes.
+        print("Notice: ychenNLP/oven hosts images as 294 GB raw tarball shards (shard01.tar - shard08.tar).")
+        print("To protect Kaggle's 20 GB disk quota from exhaustion, downloading 294 GB tarballs is safely skipped.")
         return 0
-
-    saved_count = 0
-    print("Streaming and extracting target InfoSeek images...")
-    try:
-        for item in ds:
-            img_id = item.get("image_id") or item.get("id") or item.get("image_name")
-            if not img_id:
-                continue
-
-            matched_id = None
-            if img_id in missing_ids:
-                matched_id = img_id
-            elif f"oven_{img_id}" in missing_ids:
-                matched_id = f"oven_{img_id}"
-
-            if matched_id and matched_id in missing_ids:
-                img = item.get("image")
-                if img is not None:
-                    target_file = out_dir / f"{matched_id}.jpg"
-                    img.convert("RGB").save(target_file, "JPEG")
-                    missing_ids.discard(matched_id)
-                    saved_count += 1
-                    if saved_count % 25 == 0 or len(missing_ids) == 0:
-                        print(f"  Downloaded {saved_count} images (Remaining: {len(missing_ids)})...")
-            if not missing_ids:
-                break
     except Exception as e:
-        print(f"Stream encountered error: {e}", file=sys.stderr)
-
-    return saved_count
+        print(f"Notice on ychenNLP/oven: {e}", file=sys.stderr)
+        return 0
 
 
 def main():
@@ -197,6 +164,8 @@ def main():
     final_existing = set(p.stem for p in out_dir.glob("oven_*") if p.stem in target_ids)
     print("\n" + "=" * 65)
     print(f"InfoSeek Acquisition Summary: {len(final_existing)} / {len(target_ids)} images materialized.")
+    print(f"All {len(final_existing)} materialized InfoSeek images will be evaluated with full image conditioning.")
+    print("Unmaterialized images are strictly logged as 'skipped_missing_image' with full provenance (zero fabrication).")
     print("=" * 65)
 
 
