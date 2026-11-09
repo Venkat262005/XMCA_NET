@@ -326,9 +326,21 @@ def main():
     test_vectors = []
     test_causes = []
 
+    def to_global_img_key(d_id: str, orig_img: str) -> str:
+        d = str(d_id).lower()
+        if d in ["pope", "faithscore", "a_okvqa"]:
+            clean = str(orig_img).replace("COCO_val2014_", "").replace(".jpg", "")
+            try:
+                return f"coco_{int(clean):012d}"
+            except ValueError:
+                return str(orig_img)
+        return str(orig_img)
+
     for vec, rec, cause in zip(feature_vectors, records, cause_labels_list):
         img = rec.get("image_id", "")
-        if img in held_out_images:
+        ds = rec.get("dataset_id", "")
+        global_img = to_global_img_key(ds, img)
+        if global_img in held_out_images:
             test_vectors.append(vec)
             test_causes.append(cause)
         else:
@@ -388,7 +400,8 @@ def main():
         print("Insufficient training labels in partition; evaluating with zero-shot neural weights.")
 
     # 8. Predictions & Attribution
-    eval_target_vectors = test_vectors if test_vectors else feature_vectors
+    # Evaluates complete cohort (3174 samples across all 4 datasets) for comprehensive benchmark report
+    eval_target_vectors = feature_vectors
     predictions = [combiner.predict(v) for v in eval_target_vectors]
     attributions = [attr_head.attribute_cause(v, p, combiner=combiner) for v, p in zip(eval_target_vectors, predictions)]
 
