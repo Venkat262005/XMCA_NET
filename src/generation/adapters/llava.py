@@ -42,6 +42,8 @@ class LLaVAAdapter(BaseVLMAdapter):
             self.processor.patch_size = 14
         if hasattr(self.processor, "image_processor") and getattr(self.processor.image_processor, "patch_size", None) is None:
             self.processor.image_processor.patch_size = 14
+        if getattr(self.processor, "vision_feature_select_strategy", None) is None:
+            self.processor.vision_feature_select_strategy = "default"
 
         try:
             self.model = LlavaForConditionalGeneration.from_pretrained(
@@ -114,11 +116,13 @@ class LLaVAAdapter(BaseVLMAdapter):
         pil_image = self._resolve_image(image)
         formatted_prompt = self.format_prompt(prompt)
 
-        # Guard against upstream transformers LlavaProcessor patch_size None bug
+        # Guard against upstream transformers LlavaProcessor patch_size & strategy None bug
         if getattr(self.processor, "patch_size", None) is None:
             self.processor.patch_size = 14
         if hasattr(self.processor, "image_processor") and getattr(self.processor.image_processor, "patch_size", None) is None:
             self.processor.image_processor.patch_size = 14
+        if getattr(self.processor, "vision_feature_select_strategy", None) is None:
+            self.processor.vision_feature_select_strategy = "default"
 
         inputs = self.processor(
             text=formatted_prompt,
