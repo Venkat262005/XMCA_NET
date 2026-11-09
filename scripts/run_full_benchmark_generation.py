@@ -72,9 +72,14 @@ def locate_image(images_dir: Path, dataset_id: str, original_image_id: str) -> O
     """Locate physical image on disk across candidate subdirectories, or auto-fetch authentic COCO image."""
     candidates = [
         images_dir / original_image_id,
+        images_dir / f"{original_image_id}.jpg",
         images_dir / dataset_id / original_image_id,
+        images_dir / dataset_id / f"{original_image_id}.jpg",
+        images_dir / "infoseek" / original_image_id,
+        images_dir / "infoseek" / f"{original_image_id}.jpg",
         images_dir / "coco" / original_image_id,
         images_dir / "cache" / original_image_id,
+        images_dir / "cache" / f"{original_image_id}.jpg",
         images_dir / "preflight" / original_image_id,
         images_dir / "preflight" / dataset_id / original_image_id,
         images_dir / "val2014" / original_image_id,

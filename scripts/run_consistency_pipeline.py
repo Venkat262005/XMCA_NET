@@ -178,7 +178,15 @@ def main():
                     records.append(json.loads(line))
                 except json.JSONDecodeError:
                     pass
-    print(f"Loaded {len(records)} generation records from {gen_path}.")
+    
+    # Filter out records where generation was skipped due to missing/corrupted image
+    evaluable_records = [
+        r for r in records
+        if r.get("status") not in ("skipped_missing_image", "skipped_corrupted_image")
+        or bool(r.get("generated_text"))
+    ]
+    print(f"Loaded {len(records)} total records from {gen_path} ({len(evaluable_records)} fully generated with image conditioning).")
+    records = evaluable_records
 
     # 2. Load authentic corpus & initialize retriever
     print("Loading authentic knowledge corpus...")
