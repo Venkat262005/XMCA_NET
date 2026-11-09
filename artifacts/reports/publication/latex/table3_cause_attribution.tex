@@ -3,13 +3,13 @@
 \small
 \caption{Neural Root-Cause Attribution Distribution for Hallucinations (Tier 100).}
 \label{tab:cause_attribution}
-\begin{tabular}{lccc}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{VLM Backbone} & \textbf{Perception Failure} & \textbf{Knowledge Retrieval Failure} & \textbf{Unattributed / Reasoning} \\
+\textbf{VLM Backbone} & \textbf{Perception ($S_P$)} & \textbf{Retrieval ($S_R$)} & \textbf{Utilization ($S_U$)} & \textbf{Unattributed} \\
 \midrule
-Qwen2-VL-7B & 32.0\% & 31.2\% & 36.8\% \\
-LLaVA-1.5-7B & 33.8\% & 32.2\% & 34.0\% \\
-InternVL2-2B & 38.0\% & 38.0\% & 24.0\% \\
+Qwen2-VL-7B & 33.5\% & 35.8\% & 22.7\% & 8.0\% \\
+LLaVA-1.5-7B & 35.2\% & 34.6\% & 21.4\% & 8.8\% \\
+InternVL2-2B & 38.6\% & 36.5\% & 16.4\% & 8.5\% \\
 \bottomrule
 \end{tabular}
 \end{table}

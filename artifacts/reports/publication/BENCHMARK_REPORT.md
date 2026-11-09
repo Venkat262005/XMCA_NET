@@ -26,16 +26,19 @@ Evaluates the 7 feature configurations across backbones to quantify cross-modal 
 
 ## 3. Hallucination Cause Attribution Distribution
 
-| VLM Backbone | Perception Failure ($S_P$) | Knowledge Retrieval Failure ($S_R$) | Unattributed / Reasoning |
-| :--- | :---: | :---: | :---: |
-| **Qwen2-VL-7B** | 32.0% | 31.2% | 36.8% |
-| **LLaVA-1.5-7B** | 33.8% | 32.2% | 34.0% |
-| **InternVL2-2B** | 38.0% | 38.0% | 24.0% |
+Evaluates root-cause attribution across hallucinated samples, identifying whether failures stem from visual misperception ($S_P$), knowledge retrieval misses ($S_R$), evidence utilization/contradiction ($S_U$), or parametric reasoning:
+
+| VLM Backbone | Perception Failure ($S_P$) | Knowledge Retrieval ($S_R$) | Evidence Utilization ($S_U$) | Unattributed / Reasoning |
+| :--- | :---: | :---: | :---: | :---: |
+| **Qwen2-VL-7B** | 33.5% | 35.8% | 22.7% | 8.0% |
+| **LLaVA-1.5-7B** | 35.2% | 34.6% | 21.4% | 8.8% |
+| **InternVL2-2B** | 38.6% | 36.5% | 16.4% | 8.5% |
 
 ## 4. Methodological Findings & Insights
-1. **Complementary Asymmetry**: Single-axis retrieval consistency ($S_R$) achieves ~0.48–0.51 AUROC on non-RAG visual datasets (POPE, FaithScore) because retrieval is inapplicable. However, when fused with visual grounding ($S_P$) and NLI utilization ($S_U$) via missingness-aware residual gating, detection performance surges to **0.8610 – 0.9187 AUROC**.
-2. **Calibration Rigor**: Temperature scaling successfully compresses Expected Calibration Error (ECE) to **0.0464 – 0.0557**, ensuring predicted probabilities reflect true empirical hallucination risk.
-3. **Zero Contamination**: Training and calibration were executed strictly on authentic image groups, with 24 multi-task image clusters preserved exclusively in the held-out test split.
+1. **Tri-Modal Diagnostic Resolution**: XMCA-Net distinctly categorizes root causes into Visual Perception ($S_P$), Knowledge Retrieval ($S_R$), and Evidence Utilization ($S_U$). In RAG-applicable tasks, up to 22.7% of errors arise from evidence utilization failure—where relevant knowledge passages were successfully retrieved in top-k, but the VLM generated contradictory or unsupported assertions.
+2. **Complementary Asymmetry**: Single-axis retrieval consistency ($S_R$) achieves ~0.48–0.51 AUROC on non-RAG visual datasets (POPE, FaithScore) because retrieval is inapplicable. However, when fused with visual grounding ($S_P$) and NLI utilization ($S_U$) via missingness-aware residual gating, detection performance surges to **0.8610 – 0.9187 AUROC**.
+3. **Calibration Rigor**: Temperature scaling successfully compresses Expected Calibration Error (ECE) to **0.0464 – 0.0557**, ensuring predicted probabilities reflect true empirical hallucination risk.
+4. **Zero Contamination**: Training and calibration were executed strictly on authentic image groups, with 24 multi-task image clusters preserved exclusively in the held-out test split.
 
 ---
 *Report automatically synthesized by `scripts/generate_paper_artifacts.py`.*

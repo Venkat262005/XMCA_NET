@@ -39,7 +39,8 @@ class AttributionPrediction(BaseModel):
     """Output prediction of the neural XMCA cause-attribution head."""
 
     sample_id: str
-    attributed_cause: str  # 'perception' | 'retrieval' | 'utilization' | 'unattributed'
+    is_hallucination: bool = False
+    attributed_cause: str  # 'faithful' | 'perception' | 'retrieval' | 'utilization' | 'unattributed'
     attribution_probabilities: Dict[str, float] = Field(default_factory=dict)
     confidence: float = 0.0
     evidence_summary: str = ""
@@ -218,8 +219,17 @@ class XMCAAttributionHead:
         dataset = TensorDataset(representations, y_t)
         loader = DataLoader(dataset, batch_size=min(16, len(dataset)), shuffle=True)
 
+        # Class-balanced loss weights across 3 failure causes
+        class_counts = [max(1, sum(1 for c in cause_labels if c == i)) for i in range(3)]
+        total_c = len(cause_labels)
+        weights = torch.tensor(
+            [total_c / (3.0 * count) for count in class_counts],
+            dtype=torch.float32,
+            device=self.device,
+        )
+
         optimizer = torch.optim.AdamW(self.network.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=weights)
 
         self.network.train()
         for _ in range(epochs):
@@ -240,20 +250,22 @@ class XMCAAttributionHead:
         combiner: Optional[XMCADetectionCombiner] = None,
     ) -> AttributionPrediction:
         """Attribute root failure cause strictly when hallucination is detected or suspected."""
-        # Faithful response: unattributed
-        if prediction.predicted_label == 0 and prediction.hallucination_probability < 0.35:
+        # 1. Faithful response: no hallucination detected
+        if prediction.predicted_label == 0:
             return AttributionPrediction(
                 sample_id=feature_vector.sample_id,
-                attributed_cause="unattributed",
+                is_hallucination=False,
+                attributed_cause="faithful",
                 attribution_probabilities={"perception": 0.0, "retrieval": 0.0, "utilization": 0.0},
-                confidence=1.0 - prediction.hallucination_probability,
+                confidence=round(float(1.0 - prediction.hallucination_probability), 4),
                 evidence_summary="Model generated faithful response consistent across diagnostic axes.",
             )
 
-        # Non-RAG datasets (POPE, FaithScore): RAG is masked out, failure is strictly perception
+        # 2. Non-RAG datasets (POPE, FaithScore): RAG is masked out, failure is strictly perception
         if feature_vector.m_r == 1.0 and feature_vector.m_u == 1.0:
             return AttributionPrediction(
                 sample_id=feature_vector.sample_id,
+                is_hallucination=True,
                 attributed_cause="perception",
                 attribution_probabilities={"perception": 1.0, "retrieval": 0.0, "utilization": 0.0},
                 confidence=round(float(1.0 - feature_vector.sp_score), 4),
@@ -263,7 +275,7 @@ class XMCAAttributionHead:
                 ),
             )
 
-        # Neural attribution inference if combiner model available
+        # 3. Neural attribution inference for RAG-applicable datasets if trained head available
         if combiner is not None and self.is_trained:
             combiner.model.eval()
             self.network.eval()
@@ -283,13 +295,44 @@ class XMCAAttributionHead:
             }
             causes = ["perception", "retrieval", "utilization"]
             best_idx = int(np.argmax(probs))
-            attributed = causes[best_idx]
-            confidence = float(probs[best_idx])
+            max_prob = float(probs[best_idx])
+
+            if max_prob < 0.38:
+                attributed = "unattributed"
+                confidence = round(max_prob, 4)
+                summary = (
+                    f"Unattributed / reasoning error: multi-axis failure scores diffuse "
+                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f})."
+                )
+            else:
+                attributed = causes[best_idx]
+                confidence = round(max_prob, 4)
+                if attributed == "perception":
+                    summary = (
+                        f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
+                        f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
+                    )
+                elif attributed == "retrieval":
+                    summary = (
+                        f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
+                        f"top relevance={feature_vector.top_relevance_score:.2f})."
+                    )
+                else:
+                    summary = (
+                        f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
+                        f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
+                    )
         else:
             # Deterministic multi-axis diagnostic comparison
             p_fail = (1.0 - feature_vector.sp_score) + feature_vector.visual_contradiction_ratio * 0.5
             r_fail = (1.0 - feature_vector.sr_score) if feature_vector.m_r == 0.0 else 0.0
-            u_fail = (1.0 - feature_vector.su_score) + feature_vector.contradiction_ratio * 0.5 if feature_vector.m_u == 0.0 else 0.0
+            u_fail = (
+                (1.0 - feature_vector.su_score)
+                + feature_vector.unsupported_claim_ratio * 0.5
+                + feature_vector.contradiction_ratio * 0.5
+                if feature_vector.m_u == 0.0
+                else 0.0
+            )
 
             scores = np.array([p_fail, r_fail, u_fail], dtype=np.float64)
             exp_s = np.exp(scores - np.max(scores))
@@ -301,27 +344,34 @@ class XMCAAttributionHead:
             }
             causes = ["perception", "retrieval", "utilization"]
             best_idx = int(np.argmax(scores))
-            attributed = causes[best_idx]
-            confidence = float(probs[best_idx])
+            max_prob = float(probs[best_idx])
 
-        if attributed == "perception":
-            summary = (
-                f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
-                f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
-            )
-        elif attributed == "retrieval":
-            summary = (
-                f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
-                f"top relevance={feature_vector.top_relevance_score:.2f})."
-            )
-        else:
-            summary = (
-                f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
-                f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
-            )
+            if max_prob < 0.38:
+                attributed = "unattributed"
+                confidence = round(max_prob, 4)
+                summary = "Unattributed reasoning error across diagnostic axes."
+            else:
+                attributed = causes[best_idx]
+                confidence = round(max_prob, 4)
+                if attributed == "perception":
+                    summary = (
+                        f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
+                        f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
+                    )
+                elif attributed == "retrieval":
+                    summary = (
+                        f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
+                        f"top relevance={feature_vector.top_relevance_score:.2f})."
+                    )
+                else:
+                    summary = (
+                        f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
+                        f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
+                    )
 
         return AttributionPrediction(
             sample_id=feature_vector.sample_id,
+            is_hallucination=True,
             attributed_cause=attributed,
             attribution_probabilities=prob_dict,
             confidence=round(confidence, 4),

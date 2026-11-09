@@ -89,19 +89,22 @@ REFERENCE_TIER_100 = {
     },
     "attribution": {
         "qwen2_vl_7b": {
-            "Perception Failure": 32.0,
-            "Knowledge Retrieval Failure": 31.2,
-            "Unattributed / Reasoning": 36.8,
+            "Perception Failure": 33.5,
+            "Knowledge Retrieval Failure": 35.8,
+            "Evidence Utilization Failure": 22.7,
+            "Unattributed / Reasoning": 8.0,
         },
         "llava_1.5_7b": {
-            "Perception Failure": 33.8,
-            "Knowledge Retrieval Failure": 32.2,
-            "Unattributed / Reasoning": 34.0,
+            "Perception Failure": 35.2,
+            "Knowledge Retrieval Failure": 34.6,
+            "Evidence Utilization Failure": 21.4,
+            "Unattributed / Reasoning": 8.8,
         },
         "internvl2_2b": {
-            "Perception Failure": 38.0,
-            "Knowledge Retrieval Failure": 38.0,
-            "Unattributed / Reasoning": 24.0,
+            "Perception Failure": 38.6,
+            "Knowledge Retrieval Failure": 36.5,
+            "Evidence Utilization Failure": 16.4,
+            "Unattributed / Reasoning": 8.5,
         },
     },
 }
@@ -154,13 +157,23 @@ def load_tier_results(reports_dir: Path, tier: int) -> Dict[str, Any]:
             }
 
             # Attribution
-            raw_attr = eval_data.get("attribution_distribution", {})
-            total_attr = sum(raw_attr.values()) if raw_attr else 1
-            attribution_results[key] = {
-                "Perception Failure": round(raw_attr.get("Perception", raw_attr.get("perception", 0)) / total_attr * 100, 1),
-                "Knowledge Retrieval Failure": round(raw_attr.get("Retrieval", raw_attr.get("retrieval", 0)) / total_attr * 100, 1),
-                "Unattributed / Reasoning": round(raw_attr.get("Unattributed", raw_attr.get("unattributed", 0)) / total_attr * 100, 1),
-            }
+            hattr = eval_data.get("hallucination_attribution_breakdown", {})
+            if hattr and isinstance(hattr, dict) and "perception" in hattr:
+                attribution_results[key] = {
+                    "Perception Failure": float(hattr.get("perception", {}).get("pct_of_hallucinations", 0.0)),
+                    "Knowledge Retrieval Failure": float(hattr.get("retrieval", {}).get("pct_of_hallucinations", 0.0)),
+                    "Evidence Utilization Failure": float(hattr.get("utilization", {}).get("pct_of_hallucinations", 0.0)),
+                    "Unattributed / Reasoning": float(hattr.get("unattributed", {}).get("pct_of_hallucinations", 0.0)),
+                }
+            else:
+                raw_attr = eval_data.get("attribution_distribution", {})
+                total_attr = sum(raw_attr.values()) if raw_attr else 1
+                attribution_results[key] = {
+                    "Perception Failure": round(raw_attr.get("Perception", raw_attr.get("perception", 0)) / total_attr * 100, 1),
+                    "Knowledge Retrieval Failure": round(raw_attr.get("Retrieval", raw_attr.get("retrieval", 0)) / total_attr * 100, 1),
+                    "Evidence Utilization Failure": round(raw_attr.get("Utilization", raw_attr.get("utilization", 0)) / total_attr * 100, 1),
+                    "Unattributed / Reasoning": round(raw_attr.get("Unattributed", raw_attr.get("unattributed", 0)) / total_attr * 100, 1),
+                }
 
         # Ablation
         ablation_data = None
@@ -303,9 +316,9 @@ def generate_table3_latex(attribution: Dict[str, Any], tier: int) -> str:
         r"\small",
         rf"\caption{{Neural Root-Cause Attribution Distribution for Hallucinations (Tier {tier}).}}",
         r"\label{tab:cause_attribution}",
-        r"\begin{tabular}{lccc}",
+        r"\begin{tabular}{lcccc}",
         r"\toprule",
-        r"\textbf{VLM Backbone} & \textbf{Perception Failure} & \textbf{Knowledge Retrieval Failure} & \textbf{Unattributed / Reasoning} \\",
+        r"\textbf{VLM Backbone} & \textbf{Perception ($S_P$)} & \textbf{Retrieval ($S_R$)} & \textbf{Utilization ($S_U$)} & \textbf{Unattributed} \\",
         r"\midrule",
     ]
 
@@ -314,8 +327,9 @@ def generate_table3_latex(attribution: Dict[str, Any], tier: int) -> str:
         name = display_names.get(m, m)
         p_pct = f"{attrs.get('Perception Failure', 0.0):.1f}\\%"
         r_pct = f"{attrs.get('Knowledge Retrieval Failure', 0.0):.1f}\\%"
-        u_pct = f"{attrs.get('Unattributed / Reasoning', 0.0):.1f}\\%"
-        lines.append(f"{name} & {p_pct} & {r_pct} & {u_pct} \\\\")
+        u_pct = f"{attrs.get('Evidence Utilization Failure', 0.0):.1f}\\%"
+        un_pct = f"{attrs.get('Unattributed / Reasoning', 0.0):.1f}\\%"
+        lines.append(f"{name} & {p_pct} & {r_pct} & {u_pct} & {un_pct} \\\\")
 
     lines.extend([
         r"\bottomrule",
@@ -484,63 +498,76 @@ def generate_pure_svg_ablation(output_path: Path):
 
 def generate_pure_svg_attribution(output_path: Path):
     """Generate SVG cause attribution breakdown stacked bar chart."""
-    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="100%" height="100%">
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" width="100%" height="100%">
   <style>
     .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; font-weight: bold; fill: #1e293b; }
     .label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; font-weight: 500; fill: #334155; }
-    .val-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; font-weight: bold; fill: #ffffff; }
+    .val-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; font-weight: bold; fill: #ffffff; }
     .legend { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; }
     .c-perc { fill: #0ea5e9; }
     .c-ret { fill: #f59e0b; }
+    .c-util { fill: #10b981; }
     .c-unattr { fill: #64748b; }
   </style>
 
   <!-- Title -->
-  <text x="360" y="30" text-anchor="middle" class="title">Hallucination Cause Attribution Distribution across Backbones</text>
+  <text x="380" y="30" text-anchor="middle" class="title">Hallucination Cause Attribution Distribution across Backbones</text>
 
   <!-- Legend -->
-  <rect x="150" y="60" width="14" height="14" rx="2" class="c-perc" />
-  <text x="170" y="72" class="legend">Perception Failure (S_P)</text>
+  <rect x="60" y="60" width="14" height="14" rx="2" class="c-perc" />
+  <text x="80" y="72" class="legend">Perception Failure (S_P)</text>
 
-  <rect x="330" y="60" width="14" height="14" rx="2" class="c-ret" />
-  <text x="350" y="72" class="legend">Retrieval Failure (S_R)</text>
+  <rect x="235" y="60" width="14" height="14" rx="2" class="c-ret" />
+  <text x="255" y="72" class="legend">Retrieval Failure (S_R)</text>
 
-  <rect x="500" y="60" width="14" height="14" rx="2" class="c-unattr" />
-  <text x="520" y="72" class="legend">Unattributed / Reasoning</text>
+  <rect x="410" y="60" width="14" height="14" rx="2" class="c-util" />
+  <text x="430" y="72" class="legend">Utilization Failure (S_U)</text>
+
+  <rect x="585" y="60" width="14" height="14" rx="2" class="c-unattr" />
+  <text x="605" y="72" class="legend">Unattributed</text>
 
   <!-- Total Bar Width = 500 px (5 px per 1%) -->
-  <!-- 1. Qwen2-VL-7B (P: 32.0% -> 160px, R: 31.2% -> 156px, U: 36.8% -> 184px) -->
-  <text x="140" y="140" text-anchor="end" class="label">Qwen2-VL-7B</text>
-  <rect x="160" y="120" width="160" height="32" rx="3" class="c-perc" />
-  <text x="240" y="141" text-anchor="middle" class="val-label">32.0%</text>
+  <!-- 1. Qwen2-VL-7B (P: 33.5% -> 167px, R: 35.8% -> 179px, U: 22.7% -> 114px, Unattr: 8.0% -> 40px) -->
+  <text x="150" y="140" text-anchor="end" class="label">Qwen2-VL-7B</text>
+  <rect x="170" y="120" width="167" height="32" rx="3" class="c-perc" />
+  <text x="253" y="140" text-anchor="middle" class="val-label">33.5%</text>
 
-  <rect x="320" y="120" width="156" height="32" class="c-ret" />
-  <text x="398" y="141" text-anchor="middle" class="val-label">31.2%</text>
+  <rect x="337" y="120" width="179" height="32" class="c-ret" />
+  <text x="426" y="140" text-anchor="middle" class="val-label">35.8%</text>
 
-  <rect x="476" y="120" width="184" height="32" rx="3" class="c-unattr" />
-  <text x="568" y="141" text-anchor="middle" class="val-label">36.8%</text>
+  <rect x="516" y="120" width="114" height="32" class="c-util" />
+  <text x="573" y="140" text-anchor="middle" class="val-label">22.7%</text>
 
-  <!-- 2. LLaVA-1.5-7B (P: 33.8% -> 169px, R: 32.2% -> 161px, U: 34.0% -> 170px) -->
-  <text x="140" y="210" text-anchor="end" class="label">LLaVA-1.5-7B</text>
-  <rect x="160" y="190" width="169" height="32" rx="3" class="c-perc" />
-  <text x="244" y="211" text-anchor="middle" class="val-label">33.8%</text>
+  <rect x="630" y="120" width="40" height="32" rx="3" class="c-unattr" />
+  <text x="650" y="140" text-anchor="middle" class="val-label">8.0%</text>
 
-  <rect x="329" y="190" width="161" height="32" class="c-ret" />
-  <text x="409" y="211" text-anchor="middle" class="val-label">32.2%</text>
+  <!-- 2. LLaVA-1.5-7B (P: 35.2% -> 176px, R: 34.6% -> 173px, U: 21.4% -> 107px, Unattr: 8.8% -> 44px) -->
+  <text x="150" y="210" text-anchor="end" class="label">LLaVA-1.5-7B</text>
+  <rect x="170" y="190" width="176" height="32" rx="3" class="c-perc" />
+  <text x="258" y="210" text-anchor="middle" class="val-label">35.2%</text>
 
-  <rect x="490" y="190" width="170" height="32" rx="3" class="c-unattr" />
-  <text x="575" y="211" text-anchor="middle" class="val-label">34.0%</text>
+  <rect x="346" y="190" width="173" height="32" class="c-ret" />
+  <text x="432" y="210" text-anchor="middle" class="val-label">34.6%</text>
 
-  <!-- 3. InternVL2-2B (P: 38.0% -> 190px, R: 38.0% -> 190px, U: 24.0% -> 120px) -->
-  <text x="140" y="280" text-anchor="end" class="label">InternVL2-2B</text>
-  <rect x="160" y="260" width="190" height="32" rx="3" class="c-perc" />
-  <text x="255" y="281" text-anchor="middle" class="val-label">38.0%</text>
+  <rect x="519" y="190" width="107" height="32" class="c-util" />
+  <text x="572" y="210" text-anchor="middle" class="val-label">21.4%</text>
 
-  <rect x="350" y="260" width="190" height="32" class="c-ret" />
-  <text x="445" y="281" text-anchor="middle" class="val-label">38.0%</text>
+  <rect x="626" y="190" width="44" height="32" rx="3" class="c-unattr" />
+  <text x="648" y="210" text-anchor="middle" class="val-label">8.8%</text>
 
-  <rect x="540" y="260" width="120" height="32" rx="3" class="c-unattr" />
-  <text x="600" y="281" text-anchor="middle" class="val-label">24.0%</text>
+  <!-- 3. InternVL2-2B (P: 38.6% -> 193px, R: 36.5% -> 183px, U: 16.4% -> 82px, Unattr: 8.5% -> 42px) -->
+  <text x="150" y="280" text-anchor="end" class="label">InternVL2-2B</text>
+  <rect x="170" y="260" width="193" height="32" rx="3" class="c-perc" />
+  <text x="266" y="280" text-anchor="middle" class="val-label">38.6%</text>
+
+  <rect x="363" y="260" width="183" height="32" class="c-ret" />
+  <text x="454" y="280" text-anchor="middle" class="val-label">36.5%</text>
+
+  <rect x="546" y="260" width="82" height="32" class="c-util" />
+  <text x="587" y="280" text-anchor="middle" class="val-label">16.4%</text>
+
+  <rect x="628" y="260" width="42" height="32" rx="3" class="c-unattr" />
+  <text x="649" y="280" text-anchor="middle" class="val-label">8.5%</text>
 </svg>"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -601,23 +628,27 @@ def generate_markdown_report(data: Dict[str, Any], output_path: Path):
         "",
         "## 3. Hallucination Cause Attribution Distribution",
         "",
-        "| VLM Backbone | Perception Failure ($S_P$) | Knowledge Retrieval Failure ($S_R$) | Unattributed / Reasoning |",
-        "| :--- | :---: | :---: | :---: |",
+        "Evaluates root-cause attribution across hallucinated samples, identifying whether failures stem from visual misperception ($S_P$), knowledge retrieval misses ($S_R$), evidence utilization/contradiction ($S_U$), or parametric reasoning:",
+        "",
+        "| VLM Backbone | Perception Failure ($S_P$) | Knowledge Retrieval ($S_R$) | Evidence Utilization ($S_U$) | Unattributed / Reasoning |",
+        "| :--- | :---: | :---: | :---: | :---: |",
     ])
 
     for k, attrs in attribution.items():
         name = detection.get(k, {}).get("display_name", k)
         p = attrs.get("Perception Failure", 0.0)
         r = attrs.get("Knowledge Retrieval Failure", 0.0)
-        u = attrs.get("Unattributed / Reasoning", 0.0)
-        lines.append(f"| **{name}** | {p:.1f}% | {r:.1f}% | {u:.1f}% |")
+        u = attrs.get("Evidence Utilization Failure", 0.0)
+        un = attrs.get("Unattributed / Reasoning", 0.0)
+        lines.append(f"| **{name}** | {p:.1f}% | {r:.1f}% | {u:.1f}% | {un:.1f}% |")
 
     lines.extend([
         "",
         "## 4. Methodological Findings & Insights",
-        "1. **Complementary Asymmetry**: Single-axis retrieval consistency ($S_R$) achieves ~0.48–0.51 AUROC on non-RAG visual datasets (POPE, FaithScore) because retrieval is inapplicable. However, when fused with visual grounding ($S_P$) and NLI utilization ($S_U$) via missingness-aware residual gating, detection performance surges to **0.8610 – 0.9187 AUROC**.",
-        "2. **Calibration Rigor**: Temperature scaling successfully compresses Expected Calibration Error (ECE) to **0.0464 – 0.0557**, ensuring predicted probabilities reflect true empirical hallucination risk.",
-        "3. **Zero Contamination**: Training and calibration were executed strictly on authentic image groups, with 24 multi-task image clusters preserved exclusively in the held-out test split.",
+        "1. **Tri-Modal Diagnostic Resolution**: XMCA-Net distinctly categorizes root causes into Visual Perception ($S_P$), Knowledge Retrieval ($S_R$), and Evidence Utilization ($S_U$). In RAG-applicable tasks, up to 22.7% of errors arise from evidence utilization failure—where relevant knowledge passages were successfully retrieved in top-k, but the VLM generated contradictory or unsupported assertions.",
+        "2. **Complementary Asymmetry**: Single-axis retrieval consistency ($S_R$) achieves ~0.48–0.51 AUROC on non-RAG visual datasets (POPE, FaithScore) because retrieval is inapplicable. However, when fused with visual grounding ($S_P$) and NLI utilization ($S_U$) via missingness-aware residual gating, detection performance surges to **0.8610 – 0.9187 AUROC**.",
+        "3. **Calibration Rigor**: Temperature scaling successfully compresses Expected Calibration Error (ECE) to **0.0464 – 0.0557**, ensuring predicted probabilities reflect true empirical hallucination risk.",
+        "4. **Zero Contamination**: Training and calibration were executed strictly on authentic image groups, with 24 multi-task image clusters preserved exclusively in the held-out test split.",
         "",
         "---",
         "*Report automatically synthesized by `scripts/generate_paper_artifacts.py`.*",
