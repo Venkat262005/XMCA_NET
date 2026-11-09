@@ -723,6 +723,11 @@ def main():
     with open(report_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print(f"\nReport written to: {report_file}")
+    if canonical_model != args.model:
+        canonical_report_file = output_dir / f"tier_{args.tier}_{canonical_model}_evaluation_report.json"
+        with open(canonical_report_file, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        print(f"Mirror alias report written to: {canonical_report_file}")
 
 
 if __name__ == "__main__":

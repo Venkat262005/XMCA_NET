@@ -97,3 +97,4 @@ def test_run_group_kfold_evaluation():
     assert all(0.0 <= p <= 1.0 for p in oof_probs)
     # Check that out-of-fold probabilities are non-trivial
     assert np.std(oof_probs) > 0.01
+
