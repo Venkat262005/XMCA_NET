@@ -20,19 +20,42 @@ class Qwen2VLAdapter(BaseVLMAdapter):
         """Load Qwen2-VL processor and model checkpoint."""
         enforce_strict_environment(self.app_config)
 
+        import os
         import torch
         from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         dtype = torch.float16 if self.dtype_str == "float16" else torch.float32
 
-        max_memory = {0: self.config.max_memory_per_gpu, 1: self.config.max_memory_per_gpu}
-        if torch.cuda.device_count() == 1:
+        # Device mapping: Balance dual-T4 GPUs (GPU 0: 9GiB, GPU 1: 13GiB)
+        # Prevents GPU 0 from being loaded with 13-14GiB of model weights,
+        # ensuring 5.5+ GiB of free VRAM on both GPUs for visual attention activations.
+        gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        if gpu_count >= 2:
+            max_memory = {0: "9GiB", 1: "13GiB"}
+        else:
             max_memory = {0: self.config.max_memory_per_gpu}
+
+        # Constrain visual resolution to prevent quadratic attention OOM on large images:
+        # min_pixels: 256 * 28 * 28 = 200,704 (approx 448x448)
+        # max_pixels: 512 * 28 * 28 = 401,408 (approx 633x633)
+        min_pixels = 256 * 28 * 28
+        max_pixels = 512 * 28 * 28
 
         self.processor = AutoProcessor.from_pretrained(
             self.model_id,
             revision=self.revision,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
         )
+        if hasattr(self.processor, "image_processor"):
+            if hasattr(self.processor.image_processor, "min_pixels"):
+                self.processor.image_processor.min_pixels = min_pixels
+            if hasattr(self.processor.image_processor, "max_pixels"):
+                self.processor.image_processor.max_pixels = max_pixels
+            if hasattr(self.processor.image_processor, "size") and isinstance(self.processor.image_processor.size, dict):
+                self.processor.image_processor.size["shortest_edge"] = min_pixels
+                self.processor.image_processor.size["longest_edge"] = max_pixels
 
         self.model = Qwen2VLForConditionalGeneration.from_pretrained(
             self.model_id,
@@ -104,18 +127,43 @@ class Qwen2VLAdapter(BaseVLMAdapter):
         input_token_count = inputs["input_ids"].shape[-1]
 
         start_time = time.perf_counter()
-        with torch.no_grad():
-            gen_kwargs = {
-                "max_new_tokens": max_tokens,
-                "do_sample": sample,
-            }
-            if sample and temp > 0:
-                gen_kwargs["temperature"] = temp
+        gen_kwargs = {
+            "max_new_tokens": max_tokens,
+            "do_sample": sample,
+        }
+        if sample and temp > 0:
+            gen_kwargs["temperature"] = temp
 
-            output_ids = self.model.generate(
-                **inputs,
-                **gen_kwargs,
+        try:
+            with torch.no_grad():
+                output_ids = self.model.generate(
+                    **inputs,
+                    **gen_kwargs,
+                )
+        except torch.OutOfMemoryError:
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            # If an unusually high resolution image triggers OOM, fallback with resized image (448x448)
+            resized_image = pil_image.copy()
+            resized_image.thumbnail((448, 448))
+            fallback_inputs = self.processor(
+                text=[formatted_prompt],
+                images=[resized_image],
+                padding=True,
+                return_tensors="pt",
             )
+            fallback_inputs = {
+                k: v.to(target_device) if hasattr(v, "to") else v
+                for k, v in fallback_inputs.items()
+            }
+            input_token_count = fallback_inputs["input_ids"].shape[-1]
+            with torch.no_grad():
+                output_ids = self.model.generate(
+                    **fallback_inputs,
+                    **gen_kwargs,
+                )
         latency_ms = (time.perf_counter() - start_time) * 1000.0
 
         generated_ids = output_ids[:, input_token_count:]

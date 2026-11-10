@@ -17,6 +17,9 @@ import time
 import argparse
 from pathlib import Path
 
+# Configure PyTorch memory allocator to prevent fragmentation on CUDA
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -280,6 +283,13 @@ def run_model_generation(
             processed_count += 1
             if processed_count % 25 == 0:
                 print(f"[{canonical_key}] Completed {processed_count} / {len(cohort_df)} samples...")
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except ImportError:
+                    pass
 
     print(f"Finished {canonical_key}: {processed_count} generated, {skipped_count} skipped.")
 
