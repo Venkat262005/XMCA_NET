@@ -112,7 +112,7 @@ class PerceptionConsistencyEstimator:
             )
 
         # Extract groundable candidate queries from claims
-        groundable_claims = [c for c in claims if c.claim_type in {"object_presence", "count", "attribute", "location"}]
+        groundable_claims = [c for c in claims if c.claim_type in {"object_presence", "object_absence", "count", "attribute", "location"}]
         text_queries = [c.subject.lower().strip() for c in groundable_claims if c.subject.strip()]
 
         # Remove duplicates while preserving order
@@ -191,38 +191,55 @@ class PerceptionConsistencyEstimator:
             c_copy = claim.model_copy()
             subj = claim.subject.lower().strip()
 
-            if claim.claim_type not in {"object_presence", "count", "attribute", "location"}:
+            if claim.claim_type not in {"object_presence", "object_absence", "count", "attribute", "location"}:
                 c_copy.verification_state = "not_applicable"
                 verified.append(c_copy)
                 continue
 
+            is_absence = (claim.claim_type == "object_absence")
             # Visual grounding score from OWL-ViT
             det_score = query_max_scores.get(subj, None)
 
             if det_score is not None:
-                if det_score >= self.grounding_threshold:
-                    is_supported = True
-                    is_contradicted = False
-                    conf = det_score
+                if is_absence:
+                    if det_score >= self.grounding_threshold:
+                        is_supported = False
+                        is_contradicted = True
+                        conf = max(0.05, 1.0 - det_score)
+                    else:
+                        is_supported = True
+                        is_contradicted = False
+                        conf = max(0.05, 1.0 - det_score)
                 else:
-                    is_supported = False
-                    is_contradicted = True
-                    conf = 1.0 - det_score
+                    if det_score >= self.grounding_threshold:
+                        is_supported = True
+                        is_contradicted = False
+                        conf = det_score
+                    else:
+                        is_supported = False
+                        is_contradicted = True
+                        conf = max(0.05, 1.0 - det_score)
             elif gt_set:
                 # Direct ground-truth matching if detector is offline
-                if subj in gt_set or any(subj in o or o in subj for o in gt_set):
+                in_gt = subj in gt_set or any(subj in o or o in subj for o in gt_set)
+                if is_absence:
+                    is_supported = not in_gt
+                    is_contradicted = in_gt
+                    conf = 0.95 if not in_gt else 0.05
+                else:
+                    is_supported = in_gt
+                    is_contradicted = not in_gt
+                    conf = 0.95 if in_gt else 0.05
+            else:
+                # Detector found no box for query
+                if is_absence:
                     is_supported = True
                     is_contradicted = False
-                    conf = 0.95
+                    conf = 0.90
                 else:
                     is_supported = False
                     is_contradicted = True
-                    conf = 0.05
-            else:
-                # Image missing or ungrounded
-                is_supported = False
-                is_contradicted = False
-                conf = 0.5
+                    conf = 0.10
 
             if is_supported:
                 supported += 1

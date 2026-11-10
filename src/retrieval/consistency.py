@@ -84,17 +84,26 @@ class RetrievalConsistencyEstimator:
         score_margin = retrieval_result.score_margin
         coverage = retrieval_result.evidence_coverage
 
+        # Dynamically adapt thresholds depending on whether scores are in [0, 1] (dense/cosine) or > 1.0 (raw BM25)
+        is_normalized = (top_score <= 1.0)
+        rel_thresh = 0.45 if is_normalized else self.relevance_threshold
+        margin_thresh = 0.03 if is_normalized else self.margin_threshold
+
         # Categorize retrieval quality
-        if top_score >= self.relevance_threshold and score_margin >= self.margin_threshold:
+        if top_score >= rel_thresh and score_margin >= margin_thresh:
             category = "sufficiently_retrieved"
-        elif top_score >= (self.relevance_threshold * 0.5):
+        elif top_score >= (rel_thresh * 0.7):
             category = "weakly_retrieved"
         else:
             category = "missing_evidence"
 
-        # Normalize score S_R using sigmoid-like scaling on BM25/dense score
-        normalized_relevance = min(1.0, max(0.0, top_score / max(1.0, self.relevance_threshold * 2.0)))
-        normalized_margin = min(1.0, max(0.0, score_margin / max(1.0, self.margin_threshold * 2.0)))
+        if is_normalized:
+            normalized_relevance = min(1.0, max(0.0, top_score))
+            normalized_margin = min(1.0, max(0.0, score_margin / 0.25))
+        else:
+            normalized_relevance = min(1.0, max(0.0, top_score / max(1.0, self.relevance_threshold * 2.0)))
+            normalized_margin = min(1.0, max(0.0, score_margin / max(1.0, self.margin_threshold * 2.0)))
+
         sr_score = 0.5 * normalized_relevance + 0.3 * normalized_margin + 0.2 * coverage
 
         doc_ids = [p.doc_id for p in passages]

@@ -31,3 +31,20 @@ def test_claim_extractor_empty_string():
     assert res.total_claims == 0
     assert len(res.claims) == 0
 
+
+def test_claim_extractor_binary_pope_vqa():
+    extractor = AtomicClaimExtractor()
+    # Question asks about a dog, answer says Yes
+    res_yes = extractor.extract_claims("pope_1", "Yes, there is a dog.", question="Is there a dog in the image?")
+    assert res_yes.total_claims >= 1
+    presence_claims = [c for c in res_yes.claims if c.claim_type == "object_presence"]
+    assert len(presence_claims) >= 1
+    assert presence_claims[0].subject == "dog"
+
+    # Question asks about a car, answer says No
+    res_no = extractor.extract_claims("pope_2", "No.", question="Is there a car in the image?")
+    assert res_no.total_claims >= 1
+    absence_claims = [c for c in res_no.claims if c.claim_type == "object_absence"]
+    assert len(absence_claims) >= 1
+    assert absence_claims[0].subject == "car"
+

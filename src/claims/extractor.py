@@ -48,7 +48,7 @@ class AtomicClaimExtractor:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
 
-    def extract_claims(self, sample_id: str, generated_text: str) -> ClaimExtractionResult:
+    def extract_claims(self, sample_id: str, generated_text: str, question: Optional[str] = None) -> ClaimExtractionResult:
         """Decompose generated answer text into atomic claims."""
         text = generated_text.strip()
         if not text:
@@ -60,6 +60,40 @@ class AtomicClaimExtractor:
 
         claims: List[AtomicClaim] = []
         claim_counter = 0
+
+        # Special handling for binary VQA queries (e.g. POPE: "Is there a <object> in the image?")
+        if question:
+            q_lower = question.lower().strip()
+            pope_match = re.search(r"is there (?:a |an |any )?([a-zA-Z\s]+?)(?: in the image|\son the\b|\sin the\b|\son\b|\sin\b|\?)", q_lower)
+            if pope_match:
+                target_obj = pope_match.group(1).strip()
+                text_lower = text.lower().strip()
+                is_no = bool(re.search(r"\b(?:no|not|none|isn't|is not|aren't|are not)\b", text_lower))
+                is_yes = bool(re.search(r"\b(?:yes|yeah|there is|there are|exists)\b", text_lower))
+                if is_no:
+                    claims.append(
+                        AtomicClaim(
+                            claim_id=f"{sample_id}_c{claim_counter}",
+                            claim_text=f"There is no {target_obj} in the image",
+                            claim_type="object_absence",
+                            subject=target_obj,
+                            predicate="absent",
+                            object_or_value=None,
+                        )
+                    )
+                    claim_counter += 1
+                elif is_yes or len(sentences) <= 1:
+                    claims.append(
+                        AtomicClaim(
+                            claim_id=f"{sample_id}_c{claim_counter}",
+                            claim_text=f"There is a {target_obj} in the image",
+                            claim_type="object_presence",
+                            subject=target_obj,
+                            predicate="exists",
+                            object_or_value=None,
+                        )
+                    )
+                    claim_counter += 1
 
         for sentence in sentences:
             sub_clauses = [c.strip() for c in re.split(r",\s*(?:and|but|while|whereas)\s*|;\s*", sentence) if c.strip()]

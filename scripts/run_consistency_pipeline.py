@@ -11,6 +11,7 @@ Executes Stages 5 through 10 of the research pipeline:
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -75,11 +76,12 @@ def build_authentic_ground_truth_map() -> Dict[str, Dict[str, Any]]:
     try:
         pope_records = loader.load_pope()
         for p in pope_records:
+            gt_ans = p.official_answer_fields.get("label", "").strip().lower()
             gt_map[p.original_sample_id] = {
-                "binary_label": p.official_label_fields["hallucination_binary"],
+                "pope_target_answer": gt_ans,
                 "cause_label": 0,  # Perception
                 "category": "pope",
-                "gt_objects": [p.raw_record.get("text", "").split()[-1].rstrip("?.!,")] if p.official_label_fields["hallucination_binary"] == 0 else [],
+                "gt_objects": [p.raw_record.get("text", "").split()[-1].rstrip("?.!,")] if gt_ans == "yes" else [],
             }
     except Exception as e:
         print(f"Warning: could not load POPE ground truth: {e}")
@@ -116,9 +118,9 @@ def build_authentic_ground_truth_map() -> Dict[str, Dict[str, Any]]:
     except Exception as e:
         print(f"Warning: could not load A-OKVQA ground truth: {e}")
 
-    # InfoSeek
+    # InfoSeek (Load all authentic validation records for complete ground truth coverage)
     try:
-        info_records = loader.load_infoseek(max_records=2500)
+        info_records = loader.load_infoseek(max_records=None)
         for item in info_records:
             answers = item.official_answer_fields.get("answer", [])
             eval_answers = item.official_answer_fields.get("answer_eval", [])
@@ -242,7 +244,19 @@ def main():
         cause_label = None
         gt_objects = None
 
-        if "binary_label" in gt_entry:
+        if "pope_target_answer" in gt_entry:
+            gt_ans = gt_entry["pope_target_answer"]
+            gen_clean = generated_text.lower().strip()
+            is_no = bool(re.search(r"\b(?:no|not|none|isn't|aren't|is not|are not)\b", gen_clean))
+            is_yes = bool(re.search(r"\b(?:yes|yeah|there is|there are|exists)\b", gen_clean))
+            if gt_ans == "yes":
+                # Ground truth object is present: faithful if model answered affirmatively without negation
+                gt_label = 0 if (is_yes and not is_no) else 1
+            else:
+                # Ground truth object is absent: faithful if model answered negatively
+                gt_label = 0 if is_no else 1
+            gt_objects = gt_entry.get("gt_objects", None)
+        elif "binary_label" in gt_entry:
             gt_label = int(gt_entry["binary_label"])
             gt_objects = gt_entry.get("gt_objects", None)
         elif "accepted_answers" in gt_entry:
@@ -251,8 +265,8 @@ def main():
             is_faithful = any(ans in gen_lower for ans in accepted if ans)
             gt_label = 0 if is_faithful else 1
 
-        # Step 5a: Atomic claim extraction
-        claims_res = claim_extractor.extract_claims(sample_id, generated_text)
+        # Step 5a: Atomic claim extraction (resolving question context for binary VQA)
+        claims_res = claim_extractor.extract_claims(sample_id, generated_text, question=question)
 
         # Step 5b: Perception consistency (S_P) via zero-shot OWL-ViT visual grounding
         p_res = p_estimator.compute_sp(
@@ -286,12 +300,14 @@ def main():
                 cause_label = 0  # Perception failure (visual grounding)
             else:
                 # RAG datasets: determine failure mode across vision, retrieval, utilization
-                if p_res.visual_contradiction_ratio >= 0.35 or (p_res.sp_score < 0.30 and p_res.sp_score < r_res.sr_score):
+                if p_res.total_claims_evaluated > 0 and (p_res.visual_contradiction_ratio >= 0.30 or (p_res.sp_score < 0.35 and p_res.sp_score < r_res.sr_score)):
                     cause_label = 0  # Visual perception failure
-                elif r_res.retrieval_failure_category == "sufficiently_retrieved" or (r_res.top_relevance_score >= 5.0 and r_res.sr_score >= 0.50):
+                elif r_res.sr_score >= 0.35 and (u_res.contradiction_ratio >= 0.20 or u_res.unsupported_claim_ratio >= 0.40 or u_res.su_score < 0.45):
                     cause_label = 2  # Evidence utilization failure (retrieved correctly, but model failed to utilize)
-                else:
+                elif r_res.is_applicable and (r_res.sr_score < 0.35 or r_res.retrieval_failure_category in ("missing_evidence", "weakly_retrieved")):
                     cause_label = 1  # Knowledge retrieval failure (retriever missed the required facts)
+                else:
+                    cause_label = 1  # Default to retrieval
         else:
             cause_label = None  # Faithful / correct sample
 
@@ -370,6 +386,28 @@ def main():
             val_vectors=train_with_labels,
             val_labels=[v.ground_truth_label for v in train_with_labels],
         )
+
+        # Select optimal decision threshold on validation partition (maximizing F1 score)
+        val_preds_raw = [combiner.predict(v) for v in train_with_labels]
+        val_scores = [p.hallucination_probability for p in val_preds_raw]
+        val_labels = [v.ground_truth_label for v in train_with_labels]
+
+        best_th = 0.5
+        best_f1 = -1.0
+        for th in np.linspace(0.15, 0.85, 71):
+            preds = [1 if s >= th else 0 for s in val_scores]
+            tp_v = sum(1 for y, p in zip(val_labels, preds) if y == 1 and p == 1)
+            fp_v = sum(1 for y, p in zip(val_labels, preds) if y == 0 and p == 1)
+            fn_v = sum(1 for y, p in zip(val_labels, preds) if y == 1 and p == 0)
+            prec_v = tp_v / max(1, tp_v + fp_v)
+            rec_v = tp_v / max(1, tp_v + fn_v)
+            f1_v = (2 * prec_v * rec_v) / max(1e-7, prec_v + rec_v)
+            if f1_v > best_f1:
+                best_f1 = f1_v
+                best_th = float(th)
+
+        combiner.set_decision_threshold(best_th)
+        print(f"Optimal decision threshold calibrated on validation partition: {best_th:.4f} (Validation F1: {best_f1:.4f})")
 
         if len(train_hallucinations) >= 6:
             p_cnt = train_hallucination_causes.count(0)
