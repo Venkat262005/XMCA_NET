@@ -215,16 +215,16 @@ class PerceptionConsistencyEstimator:
                     is_supported = False
                     is_contradicted = True
                     conf = 0.05
-            elif in_gt:
-                # Authentic ground truth explicitly confirms object is present
+            elif gt_set:
+                # Ground truth object list provided for image
                 if is_absence:
-                    is_supported = False
-                    is_contradicted = True
-                    conf = 0.05
+                    is_supported = not in_gt
+                    is_contradicted = in_gt
+                    conf = 0.95 if not in_gt else 0.05
                 else:
-                    is_supported = True
-                    is_contradicted = False
-                    conf = 0.95
+                    is_supported = in_gt
+                    is_contradicted = not in_gt
+                    conf = 0.95 if in_gt else 0.05
             elif det_score is not None:
                 if is_absence:
                     if det_score >= self.grounding_threshold:

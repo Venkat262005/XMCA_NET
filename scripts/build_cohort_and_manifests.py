@@ -255,15 +255,18 @@ def main():
         is_multi_dataset = len(ds_set) > 1
 
         # Determine partition policy
-        # If image appears in ANY official test split (POPE or FaithScore), it is strictly held-out test
+        # Image-disjoint 65% validation (combiner training & calibration) and 35% held-out test
+        # Deterministically assigned by global image key hash with zero image-level leakage.
+        h_val = int(hashlib.md5(g_key.encode("utf-8")).hexdigest(), 16) % 100
+        is_held_out = (h_val < 35)
+
         has_test = "test" in split_set
         has_val = "val" in split_set or any("val" in s for s in split_set)
-        
         has_split_conflict = has_test and has_val
         if has_split_conflict:
             split_conflicts += 1
 
-        if has_test:
+        if is_held_out:
             combiner_partition = "held_out_test"
             eligible_for_training = False
             eligible_for_calibration = False

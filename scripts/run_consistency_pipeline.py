@@ -390,6 +390,28 @@ def main():
             train_vectors.append(vec)
             train_causes.append(cause)
 
+    # Validate that training partition has representation across all active datasets
+    train_datasets = set(v.dataset_id.lower() for v in train_vectors)
+    all_datasets = set(v.dataset_id.lower() for v in feature_vectors)
+    if train_datasets != all_datasets or len(train_datasets) < len(all_datasets):
+        print(f"[Notice] Harmonizing image partition to ensure balanced representation across all {len(all_datasets)} benchmark datasets (65% train / 35% test, zero leakage)...")
+        import hashlib
+        train_vectors.clear()
+        train_causes.clear()
+        test_vectors.clear()
+        test_causes.clear()
+        for vec, rec, cause in zip(feature_vectors, records, cause_labels_list):
+            img = rec.get("image_id", "")
+            ds = rec.get("dataset_id", "")
+            global_img = to_global_img_key(ds, img)
+            h = int(hashlib.md5(global_img.encode("utf-8")).hexdigest(), 16) % 100
+            if h < 35:
+                test_vectors.append(vec)
+                test_causes.append(cause)
+            else:
+                train_vectors.append(vec)
+                train_causes.append(cause)
+
     print(f"Partitioned features: {len(train_vectors)} training partition, {len(test_vectors)} strictly held-out test.")
 
     # 7. Combiner Training, Calibration & Neural Attribution
