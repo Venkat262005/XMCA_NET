@@ -266,6 +266,10 @@ class XMCAAttributionHead:
         self.network.train()
         for _ in range(epochs):
             for batch_rep, batch_raw, batch_y in loader:
+                batch_rep = batch_rep.to(self.device)
+                batch_raw = batch_raw.to(self.device)
+                batch_y = batch_y.to(self.device)
+
                 optimizer.zero_grad()
                 logits = self.network(batch_rep, raw_x=batch_raw)
                 loss = criterion(logits, batch_y)

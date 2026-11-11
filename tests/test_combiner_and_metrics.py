@@ -140,6 +140,40 @@ def test_attribution_head():
     assert attr_res.attributed_cause == "perception"
     assert attr_res.attribution_probabilities["perception"] == 1.0
 
+    # Test RAG attribution (utilization failure vs retrieval failure)
+    feat_rag_util = DiagnosticFeatureVector(
+        sample_id="rag_util_fail",
+        dataset_id="infoseek",
+        model_name="llava",
+        sp_score=0.85,
+        visual_support_ratio=0.85,
+        visual_contradiction_ratio=0.0,
+        visual_coverage=1.0,
+        grounding_uncertainty=0.1,
+        sr_score=0.80,  # Well retrieved
+        top_relevance_score=0.85,
+        mean_relevance_score=0.75,
+        score_margin=0.15,
+        evidence_coverage=0.9,
+        m_r=0.0,
+        su_score=0.20,  # Utilization failed!
+        entailment_ratio=0.1,
+        contradiction_ratio=0.6,
+        omission_ratio=0.0,
+        unsupported_claim_ratio=0.5,
+        m_u=0.0,
+        total_claims=3,
+        sp_x_sr=0.85 * 0.80,
+        sp_x_su=0.85 * 0.20,
+    )
+    pred_rag = combiner.predict(feat_rag_util)
+    pred_rag.predicted_label = 1
+    pred_rag.hallucination_probability = 0.88
+
+    attr_rag = attr_head.attribute_cause(feat_rag_util, pred_rag, combiner=combiner)
+    assert attr_rag.is_hallucination is True
+    assert attr_rag.attributed_cause in {"utilization", "retrieval", "perception", "unattributed"}
+
 
 def test_metric_evaluator():
     evaluator = MetricEvaluator()
