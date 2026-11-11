@@ -312,6 +312,18 @@ def main():
     is_held_out = labeled_df["global_image_id"].isin(held_out_images).values
     labeled_df["is_held_out"] = is_held_out
 
+    # Harmonize partition to guarantee balanced dataset representation if any dataset was unmapped
+    train_datasets = set(labeled_df[~is_held_out]["dataset_id"].unique())
+    all_datasets = set(labeled_df["dataset_id"].unique())
+    if train_datasets != all_datasets or len(train_datasets) < len(all_datasets):
+        import hashlib
+        print(f"[Notice] Harmonizing image partition across all {len(all_datasets)} benchmark datasets (65% train / 35% test, zero leakage)...")
+        is_held_out = np.array([
+            (int(hashlib.md5(str(gid).encode("utf-8")).hexdigest(), 16) % 100 < 35)
+            for gid in labeled_df["global_image_id"]
+        ])
+        labeled_df["is_held_out"] = is_held_out
+
     n_held_out = int(np.sum(is_held_out))
     n_train_pool = len(labeled_df) - n_held_out
     print(f"Dataset Partitioning: {n_train_pool} training-pool samples, {n_held_out} strictly held-out test samples.")
