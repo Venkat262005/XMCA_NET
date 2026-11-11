@@ -258,11 +258,27 @@ def main():
     print("=" * 80)
 
     # 1. Load diagnostic feature representations
-    if not Path(args.features_file).exists():
+    feat_path = Path(args.features_file)
+    if not feat_path.exists():
+        # Auto-resolve typo or Jupyter variable expansion issues (e.g. tier_000 -> tier_1000)
+        cand_dir = Path("artifacts/features")
+        if cand_dir.exists():
+            if args.model:
+                cand_model = list(cand_dir.glob(f"*tier_*{args.model}*features.parquet"))
+                if cand_model:
+                    feat_path = cand_model[-1]
+                    print(f"[Notice] Resolved {args.features_file} to available feature file: {feat_path}")
+            if not feat_path.exists() and args.tier:
+                cand_tier = list(cand_dir.glob(f"tier_{args.tier}_*.parquet"))
+                if cand_tier:
+                    feat_path = cand_tier[0]
+                    print(f"[Notice] Resolved {args.features_file} to: {feat_path}")
+
+    if not feat_path.exists():
         print(f"Error: Features file not found at: {args.features_file}")
         sys.exit(1)
 
-    df = pd.read_parquet(args.features_file)
+    df = pd.read_parquet(feat_path)
     print(f"Loaded {len(df)} total feature vectors.")
 
     # Filter to records with ground truth labels
