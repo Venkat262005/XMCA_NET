@@ -466,36 +466,7 @@ def main():
                 best_th = float(th)
 
         combiner.set_decision_threshold(best_th)
-        print(f"Global decision threshold calibrated on validation partition: {best_th:.4f} (Validation F1: {best_f1:.4f})")
-
-        # 2. Calibrate regime-aware & dataset-specific decision thresholds
-        # This prevents datasets with heavy class imbalances (e.g. InfoSeek 86% positive)
-        # from corrupting the decision boundary of balanced datasets (e.g. POPE 16% positive)
-        for ds_name in ["pope", "faithscore", "a_okvqa", "infoseek"]:
-            ds_indices = [idx for idx, v in enumerate(train_with_labels) if v.dataset_id.lower() == ds_name]
-            if len(ds_indices) >= 20:
-                ds_scores = [val_scores[idx] for idx in ds_indices]
-                ds_y = [val_labels[idx] for idx in ds_indices]
-                if len(set(ds_y)) > 1:
-                    ds_best_th = best_th
-                    ds_best_f1 = -1.0
-                    for th in np.linspace(0.20, 0.80, 61):
-                        preds = [1 if s >= th else 0 for s in ds_scores]
-                        tp_d = sum(1 for y, p in zip(ds_y, preds) if y == 1 and p == 1)
-                        fp_d = sum(1 for y, p in zip(ds_y, preds) if y == 0 and p == 1)
-                        fn_d = sum(1 for y, p in zip(ds_y, preds) if y == 1 and p == 0)
-                        prec_d = tp_d / max(1, tp_d + fp_d)
-                        rec_d = tp_d / max(1, tp_d + fn_d)
-                        f1_d = (2 * prec_d * rec_d) / max(1e-7, prec_d + rec_d)
-                        if f1_d > ds_best_f1:
-                            ds_best_f1 = f1_d
-                            ds_best_th = float(th)
-                    combiner.set_dataset_threshold(ds_name, ds_best_th)
-                    print(f"  Regime-calibrated {ds_name.upper():10s} threshold: {ds_best_th:.4f} (Validation F1: {ds_best_f1:.4f})")
-                else:
-                    combiner.set_dataset_threshold(ds_name, best_th)
-            else:
-                combiner.set_dataset_threshold(ds_name, best_th)
+        print(f"Universal decision threshold calibrated on validation partition: {best_th:.4f} (Validation F1: {best_f1:.4f})")
 
         if len(train_hallucinations) >= 6:
             p_cnt = train_hallucination_causes.count(0)
@@ -686,7 +657,7 @@ def main():
 
         # AUROC, PR-AUC, ECE, Brier
         if len(d_gt_labels) > 0 and len(set(d_gt_labels)) > 1:
-            d_eval = evaluator.compute_detection_metrics(d_gt_labels, d_scores, threshold=combiner.get_threshold(d_name))
+            d_eval = evaluator.compute_detection_metrics(d_gt_labels, d_scores, threshold=combiner.decision_threshold)
             d_entry["auroc"] = d_eval.auroc
             d_entry["pr_auc"] = d_eval.pr_auc
             d_entry["ece"] = d_eval.ece

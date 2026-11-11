@@ -159,23 +159,11 @@ class XMCADetectionCombiner:
         self.scaler.calibrate(val_logits, y_t)
 
     def set_decision_threshold(self, threshold: float):
-        """Set global fallback decision threshold."""
+        """Set universal calibrated decision threshold."""
         self.decision_threshold = float(max(0.01, min(0.99, threshold)))
 
-    def set_dataset_threshold(self, dataset_id: str, threshold: float):
-        """Set dataset-specific calibrated decision threshold."""
-        self.dataset_thresholds[dataset_id.lower().strip()] = float(max(0.01, min(0.99, threshold)))
-
     def get_threshold(self, dataset_id: Optional[str] = None, m_r: float = 0.0) -> float:
-        """Resolve calibrated threshold: dataset-specific -> regime-specific -> global fallback."""
-        if dataset_id:
-            d_clean = dataset_id.lower().strip()
-            if d_clean in self.dataset_thresholds:
-                return self.dataset_thresholds[d_clean]
-        if m_r == 1.0 and "vision_regime" in self.dataset_thresholds:
-            return self.dataset_thresholds["vision_regime"]
-        if m_r == 0.0 and "rag_regime" in self.dataset_thresholds:
-            return self.dataset_thresholds["rag_regime"]
+        """Resolve universal calibrated decision threshold learned on validation partition."""
         return self.decision_threshold
 
     def predict(
