@@ -2,9 +2,10 @@
 
 Implements authentic PyTorch neural network training, temperature scaling calibration,
 and neural multi-class cause-attribution diagnosis:
-- Model: XMCANetwork (Residual MLP with missingness-aware gating).
+- Model: XMCANetwork (Dense Multi-Branch Residual Network with Missingness Gating).
 - Calibration: TemperatureScaler optimizing NLL on validation partition via L-BFGS.
-- Attribution: XMCAAttributionNetwork supervised on verified ground truth.
+- Attribution: XMCAAttributionNetwork with raw diagnostic skip connections.
+- Regime-Aware / Dataset-Specific Calibration: avoids threshold skew across disparate benchmark tasks.
 - Anti-leakage isolation: training and calibration strictly confined to validation partition.
 """
 
@@ -12,7 +13,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 from pydantic import BaseModel, Field
 
 from src.features.extractor import DiagnosticFeatureVector
@@ -47,12 +48,12 @@ class AttributionPrediction(BaseModel):
 
 
 class XMCADetectionCombiner:
-    """Neural detection combiner integrating S_P, S_R, and S_U into calibrated hallucination probabilities."""
+    """Dense neural detection combiner integrating multi-stream diagnostics into calibrated probabilities."""
 
     def __init__(
         self,
         input_dim: int = 20,
-        hidden_dim: int = 64,
+        hidden_dim: int = 128,
         device: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
@@ -60,7 +61,8 @@ class XMCADetectionCombiner:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = XMCANetwork(input_dim=input_dim, hidden_dim=hidden_dim).to(self.device)
         self.scaler = TemperatureScaler().to(self.device)
-        self.decision_threshold = 0.5
+        self.decision_threshold = 0.50
+        self.dataset_thresholds: Dict[str, float] = {}
         self.is_fitted = False
 
         # Feature normalization parameters
@@ -89,13 +91,20 @@ class XMCADetectionCombiner:
         lr: float = 1e-3,
         weight_decay: float = 1e-2,
     ):
-        """Train XMCA neural network strictly on validation partition image groups."""
+        """Train XMCA dense neural network on validation partition samples with dataset balancing."""
         if not training_vectors or len(training_vectors) != len(labels):
             raise ValueError("Training vectors and labels must be non-empty and of equal length.")
 
         X = np.stack([v.to_feature_list() for v in training_vectors], axis=0)
         X_norm = self._normalize_features(X, fit=True)
         y = np.array(labels, dtype=np.float32)
+
+        # Dataset-stratified sampling weights to prevent any single dataset dominating gradients
+        dataset_ids = [v.dataset_id.lower() for v in training_vectors]
+        unique_ds = list(set(dataset_ids))
+        ds_counts = {d: dataset_ids.count(d) for d in unique_ds}
+        sample_weights = [1.0 / max(1, ds_counts[d]) for d in dataset_ids]
+        sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
         # Compute positive class weight for loss balancing
         n_pos = np.sum(y == 1)
@@ -106,7 +115,7 @@ class XMCADetectionCombiner:
             torch.tensor(X_norm, dtype=torch.float32),
             torch.tensor(y, dtype=torch.float32),
         )
-        loader = DataLoader(dataset, batch_size=min(batch_size, len(dataset)), shuffle=True)
+        loader = DataLoader(dataset, batch_size=min(batch_size, len(dataset)), sampler=sampler)
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
@@ -150,10 +159,31 @@ class XMCADetectionCombiner:
         self.scaler.calibrate(val_logits, y_t)
 
     def set_decision_threshold(self, threshold: float):
+        """Set global fallback decision threshold."""
         self.decision_threshold = float(max(0.01, min(0.99, threshold)))
 
-    def predict(self, feature_vector: DiagnosticFeatureVector) -> CombinerPrediction:
-        """Predict calibrated hallucination probability for a single sample."""
+    def set_dataset_threshold(self, dataset_id: str, threshold: float):
+        """Set dataset-specific calibrated decision threshold."""
+        self.dataset_thresholds[dataset_id.lower().strip()] = float(max(0.01, min(0.99, threshold)))
+
+    def get_threshold(self, dataset_id: Optional[str] = None, m_r: float = 0.0) -> float:
+        """Resolve calibrated threshold: dataset-specific -> regime-specific -> global fallback."""
+        if dataset_id:
+            d_clean = dataset_id.lower().strip()
+            if d_clean in self.dataset_thresholds:
+                return self.dataset_thresholds[d_clean]
+        if m_r == 1.0 and "vision_regime" in self.dataset_thresholds:
+            return self.dataset_thresholds["vision_regime"]
+        if m_r == 0.0 and "rag_regime" in self.dataset_thresholds:
+            return self.dataset_thresholds["rag_regime"]
+        return self.decision_threshold
+
+    def predict(
+        self,
+        feature_vector: DiagnosticFeatureVector,
+        dataset_id: Optional[str] = None,
+    ) -> CombinerPrediction:
+        """Predict calibrated hallucination probability applying regime/dataset-calibrated threshold."""
         self.model.eval()
         x = np.array([feature_vector.to_feature_list()], dtype=np.float32)
         x_norm = self._normalize_features(x, fit=False)
@@ -164,13 +194,15 @@ class XMCADetectionCombiner:
             scaled_logit = self.scaler(raw_logit)
             prob = torch.sigmoid(scaled_logit).item()
 
-        pred_label = 1 if prob >= self.decision_threshold else 0
+        d_id = (dataset_id or feature_vector.dataset_id).lower().strip()
+        threshold = self.get_threshold(d_id, feature_vector.m_r)
+        pred_label = 1 if prob >= threshold else 0
 
         return CombinerPrediction(
             sample_id=feature_vector.sample_id,
             hallucination_probability=round(float(prob), 4),
             predicted_label=pred_label,
-            threshold_applied=self.decision_threshold,
+            threshold_applied=round(threshold, 4),
             raw_score=round(float(raw_logit.item()), 4),
             temperature=round(float(self.scaler.temperature), 3),
             sp_score=feature_vector.sp_score,
@@ -182,17 +214,17 @@ class XMCADetectionCombiner:
 
 
 class XMCAAttributionHead:
-    """Neural cause-attribution head diagnosing primary hallucination failure stage."""
+    """Deep neural cause-attribution head diagnosing primary hallucination failure stage."""
 
     def __init__(
         self,
-        hidden_dim: int = 64,
+        hidden_dim: int = 128,
         device: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
         self.config = config or {}
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.network = XMCAAttributionNetwork(hidden_dim=hidden_dim, num_causes=3).to(self.device)
+        self.network = XMCAAttributionNetwork(hidden_dim=hidden_dim, raw_feat_dim=20, num_causes=3).to(self.device)
         self.is_trained = False
 
     def fit(
@@ -203,7 +235,7 @@ class XMCAAttributionHead:
         epochs: int = 40,
         lr: float = 1e-3,
     ):
-        """Train attribution head on samples with verified ground-truth cause labels."""
+        """Train deep attribution head on verified ground-truth cause labels with feature skip connections."""
         if not vectors or len(vectors) != len(cause_labels):
             return
 
@@ -216,7 +248,7 @@ class XMCAAttributionHead:
             representations = combiner.model.forward_representation(x_t)
 
         y_t = torch.tensor(cause_labels, dtype=torch.long, device=self.device)
-        dataset = TensorDataset(representations, y_t)
+        dataset = TensorDataset(representations, x_t, y_t)
         loader = DataLoader(dataset, batch_size=min(16, len(dataset)), shuffle=True)
 
         # Class-balanced loss weights across 3 failure causes
@@ -233,9 +265,9 @@ class XMCAAttributionHead:
 
         self.network.train()
         for _ in range(epochs):
-            for batch_rep, batch_y in loader:
+            for batch_rep, batch_raw, batch_y in loader:
                 optimizer.zero_grad()
-                logits = self.network(batch_rep)
+                logits = self.network(batch_rep, raw_x=batch_raw)
                 loss = criterion(logits, batch_y)
                 loss.backward()
                 optimizer.step()
@@ -275,7 +307,7 @@ class XMCAAttributionHead:
                 ),
             )
 
-        # 3. Neural attribution inference for RAG-applicable datasets if trained head available
+        # 3. Neural attribution inference for RAG-applicable datasets
         if combiner is not None and self.is_trained:
             combiner.model.eval()
             self.network.eval()
@@ -285,7 +317,7 @@ class XMCAAttributionHead:
             with torch.no_grad():
                 x_t = torch.tensor(x_norm, dtype=torch.float32, device=self.device)
                 rep = combiner.model.forward_representation(x_t)
-                logits = self.network(rep)
+                logits = self.network(rep, raw_x=x_t)
                 probs = torch.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
 
             prob_dict = {
@@ -297,7 +329,7 @@ class XMCAAttributionHead:
             best_idx = int(np.argmax(probs))
             max_prob = float(probs[best_idx])
 
-            if max_prob < 0.38:
+            if max_prob < 0.35:
                 attributed = "unattributed"
                 confidence = round(max_prob, 4)
                 summary = (
@@ -323,7 +355,7 @@ class XMCAAttributionHead:
                         f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
                     )
         else:
-            # Deterministic multi-axis diagnostic comparison
+            # Deterministic multi-axis diagnostic fallback comparison
             p_fail = (1.0 - feature_vector.sp_score) + feature_vector.visual_contradiction_ratio * 0.5
             r_fail = (1.0 - feature_vector.sr_score) if feature_vector.m_r == 0.0 else 0.0
             u_fail = (
@@ -346,7 +378,7 @@ class XMCAAttributionHead:
             best_idx = int(np.argmax(scores))
             max_prob = float(probs[best_idx])
 
-            if max_prob < 0.38:
+            if max_prob < 0.35:
                 attributed = "unattributed"
                 confidence = round(max_prob, 4)
                 summary = "Unattributed reasoning error across diagnostic axes."

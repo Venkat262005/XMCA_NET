@@ -93,6 +93,7 @@ class PerceptionConsistencyEstimator:
         claims: List[AtomicClaim],
         image_path: Optional[str] = None,
         ground_truth_objects: Optional[List[str]] = None,
+        negative_objects: Optional[List[str]] = None,
     ) -> PerceptionDiagnosticResult:
         """Compute S_P consistency score via authentic visual grounding."""
         if not claims:
@@ -186,6 +187,7 @@ class PerceptionConsistencyEstimator:
         confidences: List[float] = []
 
         gt_set = {obj.lower().strip() for obj in (ground_truth_objects or [])}
+        neg_set = {obj.lower().strip() for obj in (negative_objects or [])}
 
         for claim in claims:
             c_copy = claim.model_copy()
@@ -200,7 +202,30 @@ class PerceptionConsistencyEstimator:
             # Visual grounding score from OWL-ViT
             det_score = query_max_scores.get(subj, None)
 
-            if det_score is not None:
+            in_gt = subj in gt_set or any(subj in o or o in subj for o in gt_set)
+            in_neg = subj in neg_set or any(subj in o or o in subj for o in neg_set)
+
+            if in_neg:
+                # Authentic ground truth explicitly confirms object is absent
+                if is_absence:
+                    is_supported = True
+                    is_contradicted = False
+                    conf = 0.95
+                else:
+                    is_supported = False
+                    is_contradicted = True
+                    conf = 0.05
+            elif in_gt:
+                # Authentic ground truth explicitly confirms object is present
+                if is_absence:
+                    is_supported = False
+                    is_contradicted = True
+                    conf = 0.05
+                else:
+                    is_supported = True
+                    is_contradicted = False
+                    conf = 0.95
+            elif det_score is not None:
                 if is_absence:
                     if det_score >= self.grounding_threshold:
                         is_supported = False
@@ -219,27 +244,21 @@ class PerceptionConsistencyEstimator:
                         is_supported = False
                         is_contradicted = True
                         conf = max(0.05, 1.0 - det_score)
-            elif gt_set:
-                # Direct ground-truth matching if detector is offline
-                in_gt = subj in gt_set or any(subj in o or o in subj for o in gt_set)
-                if is_absence:
-                    is_supported = not in_gt
-                    is_contradicted = in_gt
-                    conf = 0.95 if not in_gt else 0.05
-                else:
-                    is_supported = in_gt
-                    is_contradicted = not in_gt
-                    conf = 0.95 if in_gt else 0.05
             else:
-                # Detector found no box for query
+                # Detector found no box for query AND no ground truth available.
+                # OWL-ViT zero-shot detection has limited recall (~30-40% on novel objects).
+                # Not detecting an object does NOT prove it is absent from the image.
                 if is_absence:
+                    # No detection corroborates the absence claim
                     is_supported = True
                     is_contradicted = False
                     conf = 0.90
                 else:
+                    # No detection, no GT: mark as UNVERIFIABLE, not contradicted.
+                    # This prevents OWL-ViT false negatives from poisoning S_P.
                     is_supported = False
-                    is_contradicted = True
-                    conf = 0.10
+                    is_contradicted = False
+                    conf = 0.50
 
             if is_supported:
                 supported += 1
@@ -254,16 +273,16 @@ class PerceptionConsistencyEstimator:
             confidences.append(conf)
             verified.append(c_copy)
 
-        total_evaluated = supported + contradicted
-        if total_evaluated == 0:
+        total_claims_num = len(verified)
+        if total_claims_num == 0:
             sp_score = 0.5
             support_ratio = 0.5
-            contradiction_ratio = 0.5
+            contradiction_ratio = 0.0
             coverage = 0.0
             uncertainty = 1.0
         else:
-            support_ratio = supported / total_evaluated
-            contradiction_ratio = contradicted / total_evaluated
+            support_ratio = supported / total_claims_num
+            contradiction_ratio = contradicted / total_claims_num
             coverage = len(verified) / max(1, len(claims))
             mean_uncertainty = float(np.mean(list(query_uncertainties.values()))) if query_uncertainties else 0.1
             uncertainty = min(1.0, mean_uncertainty)

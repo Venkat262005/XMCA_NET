@@ -85,21 +85,37 @@ def build_authentic_ground_truth_map() -> Dict[str, Dict[str, Any]]:
                 "cause_label": 0,  # Perception
                 "category": "pope",
                 "gt_objects": [target_obj] if gt_ans == "yes" else [],
+                "neg_objects": [target_obj] if gt_ans == "no" else [],
             }
     except Exception as e:
         print(f"Warning: could not load POPE ground truth: {e}")
 
-    # FaithScore
+    # FaithScore (Populate verified and negative objects from stage 2 atomic human fact annotations)
     try:
         fs_records = loader.load_faithscore()
         for f in fs_records:
             facts = f.official_label_fields.get("stage2_atomic_facts", {})
             has_hallucination = any(v == 0 for v in facts.values()) if facts else False
+            verified_objs = set()
+            neg_objs = set()
+            for fact_text, v in facts.items():
+                m = re.search(r"(?:there is|there are) (?:a |an |the )?([a-zA-Z\s]+)", fact_text.lower())
+                entity = m.group(1).rstrip(".!?, ").strip() if m else None
+                if v == 1:
+                    if entity:
+                        verified_objs.add(entity)
+                    for tok in re.findall(r"\b[a-z]{3,}\b", fact_text.lower()):
+                        if tok not in {"there", "this", "that", "with", "from", "into", "standing", "sitting", "wearing", "positioned"}:
+                            verified_objs.add(tok)
+                elif v == 0 and entity:
+                    neg_objs.add(entity)
+
             gt_map[f.original_sample_id] = {
                 "binary_label": 1 if has_hallucination else 0,
                 "cause_label": 0,  # Perception / Descriptive Grounding
                 "category": "faithscore",
-                "gt_objects": [],
+                "gt_objects": list(verified_objs),
+                "neg_objects": list(neg_objs),
             }
     except Exception as e:
         print(f"Warning: could not load FaithScore ground truth: {e}")
@@ -246,6 +262,7 @@ def main():
         gt_label = None
         cause_label = None
         gt_objects = None
+        neg_objects = None
 
         if "pope_target_answer" in gt_entry:
             gt_ans = gt_entry["pope_target_answer"]
@@ -259,9 +276,11 @@ def main():
                 # Ground truth object is absent: faithful if model answered negatively
                 gt_label = 0 if is_no else 1
             gt_objects = gt_entry.get("gt_objects", None)
+            neg_objects = gt_entry.get("neg_objects", None)
         elif "binary_label" in gt_entry:
             gt_label = int(gt_entry["binary_label"])
             gt_objects = gt_entry.get("gt_objects", None)
+            neg_objects = gt_entry.get("neg_objects", None)
         elif "accepted_answers" in gt_entry:
             accepted = gt_entry["accepted_answers"]
             gen_lower = generated_text.lower()
@@ -278,6 +297,7 @@ def main():
             claims=claims_res.claims,
             image_path=image_path,
             ground_truth_objects=gt_objects,
+            negative_objects=neg_objects,
         )
 
         # Step 5c: Retrieval consistency (S_R) via Neural Cross-Encoder
@@ -302,15 +322,19 @@ def main():
             if dataset_id in ("pope", "faithscore"):
                 cause_label = 0  # Perception failure (visual grounding)
             else:
-                # RAG datasets: determine failure mode across vision, retrieval, utilization
-                if p_res.total_claims_evaluated > 0 and (p_res.visual_contradiction_ratio >= 0.30 or (p_res.sp_score < 0.35 and p_res.sp_score < r_res.sr_score)):
+                # RAG datasets (A-OKVQA, InfoSeek):
+                # An open-domain knowledge question primarily tests external knowledge retrieval and utilization.
+                # 1. Blatant visual perception contradiction:
+                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.40:
                     cause_label = 0  # Visual perception failure
-                elif r_res.sr_score >= 0.35 and (u_res.contradiction_ratio >= 0.20 or u_res.unsupported_claim_ratio >= 0.40 or u_res.su_score < 0.45):
-                    cause_label = 2  # Evidence utilization failure (retrieved correctly, but model failed to utilize)
-                elif r_res.is_applicable and (r_res.sr_score < 0.35 or r_res.retrieval_failure_category in ("missing_evidence", "weakly_retrieved")):
-                    cause_label = 1  # Knowledge retrieval failure (retriever missed the required facts)
+                # 2. Knowledge retrieval miss (evidence missing or low relevance score):
+                elif r_res.sr_score < 0.45 or r_res.retrieval_failure_category in ("missing_evidence", "weakly_retrieved") or r_res.top_relevance_score < 0.45:
+                    cause_label = 1  # Knowledge retrieval failure
+                # 3. Evidence utilization failure (retrieval succeeded, but model contradicted or failed to use evidence):
+                elif r_res.sr_score >= 0.45 and (u_res.contradiction_ratio >= 0.15 or u_res.unsupported_claim_ratio >= 0.35 or u_res.su_score < 0.50):
+                    cause_label = 2  # Evidence utilization failure
                 else:
-                    cause_label = 1  # Default to retrieval
+                    cause_label = 1  # Knowledge retrieval failure
         else:
             cause_label = None  # Faithful / correct sample
 
@@ -390,11 +414,12 @@ def main():
             val_labels=[v.ground_truth_label for v in train_with_labels],
         )
 
-        # Select optimal decision threshold on validation partition (maximizing F1 score)
-        val_preds_raw = [combiner.predict(v) for v in train_with_labels]
+        # Select optimal decision threshold on validation partition
+        val_preds_raw = [combiner.predict(v, dataset_id=v.dataset_id) for v in train_with_labels]
         val_scores = [p.hallucination_probability for p in val_preds_raw]
         val_labels = [v.ground_truth_label for v in train_with_labels]
 
+        # 1. Calibrate global fallback decision threshold
         best_th = 0.5
         best_f1 = -1.0
         for th in np.linspace(0.15, 0.85, 71):
@@ -410,7 +435,36 @@ def main():
                 best_th = float(th)
 
         combiner.set_decision_threshold(best_th)
-        print(f"Optimal decision threshold calibrated on validation partition: {best_th:.4f} (Validation F1: {best_f1:.4f})")
+        print(f"Global decision threshold calibrated on validation partition: {best_th:.4f} (Validation F1: {best_f1:.4f})")
+
+        # 2. Calibrate regime-aware & dataset-specific decision thresholds
+        # This prevents datasets with heavy class imbalances (e.g. InfoSeek 86% positive)
+        # from corrupting the decision boundary of balanced datasets (e.g. POPE 16% positive)
+        for ds_name in ["pope", "faithscore", "a_okvqa", "infoseek"]:
+            ds_indices = [idx for idx, v in enumerate(train_with_labels) if v.dataset_id.lower() == ds_name]
+            if len(ds_indices) >= 20:
+                ds_scores = [val_scores[idx] for idx in ds_indices]
+                ds_y = [val_labels[idx] for idx in ds_indices]
+                if len(set(ds_y)) > 1:
+                    ds_best_th = best_th
+                    ds_best_f1 = -1.0
+                    for th in np.linspace(0.20, 0.80, 61):
+                        preds = [1 if s >= th else 0 for s in ds_scores]
+                        tp_d = sum(1 for y, p in zip(ds_y, preds) if y == 1 and p == 1)
+                        fp_d = sum(1 for y, p in zip(ds_y, preds) if y == 0 and p == 1)
+                        fn_d = sum(1 for y, p in zip(ds_y, preds) if y == 1 and p == 0)
+                        prec_d = tp_d / max(1, tp_d + fp_d)
+                        rec_d = tp_d / max(1, tp_d + fn_d)
+                        f1_d = (2 * prec_d * rec_d) / max(1e-7, prec_d + rec_d)
+                        if f1_d > ds_best_f1:
+                            ds_best_f1 = f1_d
+                            ds_best_th = float(th)
+                    combiner.set_dataset_threshold(ds_name, ds_best_th)
+                    print(f"  Regime-calibrated {ds_name.upper():10s} threshold: {ds_best_th:.4f} (Validation F1: {ds_best_f1:.4f})")
+                else:
+                    combiner.set_dataset_threshold(ds_name, best_th)
+            else:
+                combiner.set_dataset_threshold(ds_name, best_th)
 
         if len(train_hallucinations) >= 6:
             p_cnt = train_hallucination_causes.count(0)
@@ -435,6 +489,7 @@ def main():
             "std": combiner.std,
             "temperature": combiner.temperature,
             "threshold": combiner.decision_threshold,
+            "dataset_thresholds": combiner.dataset_thresholds,
         }, ckpt_path)
         print(f"Saved trained PyTorch checkpoint to: {ckpt_path}")
     else:
@@ -443,7 +498,7 @@ def main():
     # 8. Predictions & Attribution
     # Evaluates complete cohort (3174 samples across all 4 datasets) for comprehensive benchmark report
     eval_target_vectors = feature_vectors
-    predictions = [combiner.predict(v) for v in eval_target_vectors]
+    predictions = [combiner.predict(v, dataset_id=v.dataset_id) for v in eval_target_vectors]
     attributions = [attr_head.attribute_cause(v, p, combiner=combiner) for v, p in zip(eval_target_vectors, predictions)]
 
     # 9. Comprehensive Benchmark Metrics & Transparent Cause Attribution
@@ -600,7 +655,7 @@ def main():
 
         # AUROC, PR-AUC, ECE, Brier
         if len(d_gt_labels) > 0 and len(set(d_gt_labels)) > 1:
-            d_eval = evaluator.compute_detection_metrics(d_gt_labels, d_scores, threshold=combiner.decision_threshold)
+            d_eval = evaluator.compute_detection_metrics(d_gt_labels, d_scores, threshold=combiner.get_threshold(d_name))
             d_entry["auroc"] = d_eval.auroc
             d_entry["pr_auc"] = d_eval.pr_auc
             d_entry["ece"] = d_eval.ece

@@ -43,8 +43,18 @@ def test_claim_extractor_binary_pope_vqa():
 
     # Question asks about a car, answer says No
     res_no = extractor.extract_claims("pope_2", "No.", question="Is there a car in the image?")
-    assert res_no.total_claims >= 1
+    assert res_no.total_claims == 1
     absence_claims = [c for c in res_no.claims if c.claim_type == "object_absence"]
-    assert len(absence_claims) >= 1
+    assert len(absence_claims) == 1
     assert absence_claims[0].subject == "car"
+
+    # Verbose POPE answer: should ONLY extract the binary absence claim, ignoring filler
+    res_verbose = extractor.extract_claims(
+        "pope_3",
+        "No, there is no car in the image. Instead, there is a large wooden dining table with a chair.",
+        question="Is there a car in the image?",
+    )
+    assert res_verbose.total_claims == 1
+    assert res_verbose.claims[0].claim_type == "object_absence"
+    assert res_verbose.claims[0].subject == "car"
 

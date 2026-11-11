@@ -60,8 +60,12 @@ class AtomicClaimExtractor:
 
         claims: List[AtomicClaim] = []
         claim_counter = 0
+        binary_vqa_resolved = False
 
         # Special handling for binary VQA queries (e.g. POPE: "Is there a <object> in the image?")
+        # When resolved, ONLY the target binary claim is emitted — general sentence decomposition
+        # is deliberately skipped to prevent verbose answers from polluting S_P with unverifiable
+        # extra claims (e.g. "golden retriever", "bench", "park") that OWL-ViT cannot detect.
         if question:
             q_lower = question.lower().strip()
             pope_match = re.search(r"is there (?:a |an |any )?([a-zA-Z\s]+?)(?: in the image|\son the\b|\sin the\b|\son\b|\sin\b|\?)", q_lower)
@@ -82,6 +86,7 @@ class AtomicClaimExtractor:
                         )
                     )
                     claim_counter += 1
+                    binary_vqa_resolved = True
                 elif is_yes or len(sentences) <= 1:
                     claims.append(
                         AtomicClaim(
@@ -94,14 +99,18 @@ class AtomicClaimExtractor:
                         )
                     )
                     claim_counter += 1
+                    binary_vqa_resolved = True
 
-        for sentence in sentences:
-            sub_clauses = [c.strip() for c in re.split(r",\s*(?:and|but|while|whereas)\s*|;\s*", sentence) if c.strip()]
-            for clause in sub_clauses:
-                extracted = self._decompose_clause(sample_id, claim_counter, clause)
-                for c in extracted:
-                    claims.append(c)
-                    claim_counter += 1
+        # General sentence decomposition — skipped when binary VQA is resolved to prevent
+        # noise claims from elaborate model responses dragging down S_P
+        if not binary_vqa_resolved:
+            for sentence in sentences:
+                sub_clauses = [c.strip() for c in re.split(r",\s*(?:and|but|while|whereas)\s*|;\s*", sentence) if c.strip()]
+                for clause in sub_clauses:
+                    extracted = self._decompose_clause(sample_id, claim_counter, clause)
+                    for c in extracted:
+                        claims.append(c)
+                        claim_counter += 1
 
         # If no clause matched specific patterns, capture the raw sentence as a single claim
         if not claims:
