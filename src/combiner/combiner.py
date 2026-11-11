@@ -330,18 +330,24 @@ class XMCAAttributionHead:
                 "utilization": round(float(probs[2]), 4),
             }
             causes = ["perception", "retrieval", "utilization"]
-            best_idx = int(np.argmax(probs))
-            max_prob = float(probs[best_idx])
+            sorted_indices = np.argsort(probs)
+            top_idx = int(sorted_indices[-1])
+            second_idx = int(sorted_indices[-2])
+            max_prob = float(probs[top_idx])
+            prob_margin = float(probs[top_idx] - probs[second_idx])
 
-            if max_prob < 0.35:
+            # Scientifically principled attribution: flag as unattributed / diffuse reasoning error
+            # when no cause achieves sufficient prominence (max_prob < 0.42) or when top two causes are ambiguous (margin < 0.12)
+            if max_prob < 0.42 or prob_margin < 0.12:
                 attributed = "unattributed"
                 confidence = round(max_prob, 4)
                 summary = (
-                    f"Unattributed / reasoning error: multi-axis failure scores diffuse "
-                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f})."
+                    f"Unattributed / diffuse reasoning error: multi-axis failure scores diffuse "
+                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f}, "
+                    f"margin={prob_margin:.2f})."
                 )
             else:
-                attributed = causes[best_idx]
+                attributed = causes[top_idx]
                 confidence = round(max_prob, 4)
                 if attributed == "perception":
                     summary = (
@@ -379,15 +385,22 @@ class XMCAAttributionHead:
                 "utilization": round(float(probs[2]), 4),
             }
             causes = ["perception", "retrieval", "utilization"]
-            best_idx = int(np.argmax(scores))
-            max_prob = float(probs[best_idx])
+            sorted_indices = np.argsort(probs)
+            top_idx = int(sorted_indices[-1])
+            second_idx = int(sorted_indices[-2])
+            max_prob = float(probs[top_idx])
+            prob_margin = float(probs[top_idx] - probs[second_idx])
 
-            if max_prob < 0.35:
+            if max_prob < 0.42 or prob_margin < 0.12:
                 attributed = "unattributed"
                 confidence = round(max_prob, 4)
-                summary = "Unattributed reasoning error across diagnostic axes."
+                summary = (
+                    f"Unattributed / diffuse reasoning error: multi-axis failure scores diffuse "
+                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f}, "
+                    f"margin={prob_margin:.2f})."
+                )
             else:
-                attributed = causes[best_idx]
+                attributed = causes[top_idx]
                 confidence = round(max_prob, 4)
                 if attributed == "perception":
                     summary = (

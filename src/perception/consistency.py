@@ -125,6 +125,7 @@ class PerceptionConsistencyEstimator:
 
         detected_boxes: List[BoundingBox] = []
         query_max_scores: Dict[str, float] = {}
+        query_continuous_scores: Dict[str, float] = {}
         query_uncertainties: Dict[str, float] = {}
 
         if image_exists and unique_queries:
@@ -144,6 +145,15 @@ class PerceptionConsistencyEstimator:
                     threshold=self.grounding_threshold,
                 )[0]
 
+                # Extract peak continuous probability for each query across candidate patches
+                if hasattr(outputs, "logits"):
+                    logits = outputs.logits[0]  # shape: (num_patches, num_queries)
+                    probs = torch.sigmoid(logits)
+                    max_probs = probs.max(dim=0).values.detach().cpu().numpy()
+                    for idx, q in enumerate(unique_queries):
+                        if idx < len(max_probs):
+                            query_continuous_scores[q.lower().strip()] = float(max_probs[idx])
+
                 scores = results["scores"].detach().cpu().numpy()
                 labels = results["labels"].detach().cpu().numpy()
                 boxes = results["boxes"].detach().cpu().numpy()
@@ -151,7 +161,7 @@ class PerceptionConsistencyEstimator:
                 w, h = image.size
                 for score, label_idx, box in zip(scores, labels, boxes):
                     if label_idx < len(unique_queries):
-                        query_text = unique_queries[label_idx]
+                        query_text = unique_queries[label_idx].lower().strip()
                         ymin, xmin, ymax, xmax = float(box[1] / h), float(box[0] / w), float(box[3] / h), float(box[2] / w)
                         detected_boxes.append(
                             BoundingBox(
@@ -168,13 +178,14 @@ class PerceptionConsistencyEstimator:
 
                 # Compute spatial entropy/uncertainty for each query
                 for q in unique_queries:
-                    q_scores = [b.confidence for b in detected_boxes if b.label == q]
+                    q_key = q.lower().strip()
+                    q_scores = [b.confidence for b in detected_boxes if b.label == q_key]
                     if q_scores:
                         p_dist = np.array(q_scores) / sum(q_scores)
                         entropy = -float(np.sum(p_dist * np.log(p_dist + 1e-9)))
-                        query_uncertainties[q] = entropy
+                        query_uncertainties[q_key] = entropy
                     else:
-                        query_uncertainties[q] = 0.5
+                        query_uncertainties[q_key] = 0.5
 
             except Exception as e:
                 # If model weights cannot be loaded (e.g. offline dry-run), evaluate via ground truth or mock logits
@@ -188,6 +199,7 @@ class PerceptionConsistencyEstimator:
 
         gt_set = {obj.lower().strip() for obj in (ground_truth_objects or [])}
         neg_set = {obj.lower().strip() for obj in (negative_objects or [])}
+        detector_active = (image_exists and (len(query_max_scores) > 0 or len(query_continuous_scores) > 0))
 
         for claim in claims:
             c_copy = claim.model_copy()
@@ -199,13 +211,51 @@ class PerceptionConsistencyEstimator:
                 continue
 
             is_absence = (claim.claim_type == "object_absence")
-            # Visual grounding score from OWL-ViT
+            # Visual grounding scores from OWL-ViT
             det_score = query_max_scores.get(subj, None)
+            cont_score = query_continuous_scores.get(subj, 0.0)
+            vis_score = det_score if det_score is not None else cont_score
 
             in_gt = subj in gt_set or any(subj in o or o in subj for o in gt_set)
             in_neg = subj in neg_set or any(subj in o or o in subj for o in neg_set)
 
-            if in_neg:
+            # 1. Authentic Neural Visual Grounding via OWL-ViT (when physical image exists & detector active)
+            # This strictly prevents data leakage by grounding on visual image pixels rather than ground truth annotations
+            if detector_active:
+                is_detected = (vis_score >= self.grounding_threshold)
+                if is_absence:
+                    if is_detected:
+                        # Model claimed object is absent, but OWL-ViT clearly detected it in image
+                        is_supported = False
+                        is_contradicted = True
+                        conf = max(0.05, 1.0 - vis_score)
+                    else:
+                        # Model claimed object is absent, and detector found no evidence
+                        is_supported = True
+                        is_contradicted = False
+                        conf = max(0.50, 1.0 - vis_score)
+                else:
+                    if is_detected:
+                        # Model claimed object is present, and OWL-ViT confirmed it
+                        is_supported = True
+                        is_contradicted = False
+                        conf = vis_score
+                    else:
+                        # Object not detected by OWL-ViT
+                        if len(claims) <= 1:
+                            # Direct binary existence query (e.g. POPE: "Is there a car?"):
+                            # Model claimed presence, but visual scan found no evidence in image
+                            is_supported = False
+                            is_contradicted = True
+                            conf = max(0.05, vis_score)
+                        else:
+                            # Open descriptive caption (e.g. FaithScore):
+                            # Mark as unverified rather than contradicted to avoid penalizing detector recall
+                            is_supported = False
+                            is_contradicted = False
+                            conf = 0.50
+            # 2. Offline Ground Truth Fallback (strictly used when detector inactive or image unavailable)
+            elif in_neg:
                 # Authentic ground truth explicitly confirms object is absent
                 if is_absence:
                     is_supported = True
@@ -225,37 +275,13 @@ class PerceptionConsistencyEstimator:
                     is_supported = in_gt
                     is_contradicted = not in_gt
                     conf = 0.95 if in_gt else 0.05
-            elif det_score is not None:
-                if is_absence:
-                    if det_score >= self.grounding_threshold:
-                        is_supported = False
-                        is_contradicted = True
-                        conf = max(0.05, 1.0 - det_score)
-                    else:
-                        is_supported = True
-                        is_contradicted = False
-                        conf = max(0.05, 1.0 - det_score)
-                else:
-                    if det_score >= self.grounding_threshold:
-                        is_supported = True
-                        is_contradicted = False
-                        conf = det_score
-                    else:
-                        is_supported = False
-                        is_contradicted = True
-                        conf = max(0.05, 1.0 - det_score)
             else:
-                # Detector found no box for query AND no ground truth available.
-                # OWL-ViT zero-shot detection has limited recall (~30-40% on novel objects).
-                # Not detecting an object does NOT prove it is absent from the image.
+                # No detector and no ground truth available
                 if is_absence:
-                    # No detection corroborates the absence claim
                     is_supported = True
                     is_contradicted = False
-                    conf = 0.90
+                    conf = 0.85
                 else:
-                    # No detection, no GT: mark as UNVERIFIABLE, not contradicted.
-                    # This prevents OWL-ViT false negatives from poisoning S_P.
                     is_supported = False
                     is_contradicted = False
                     conf = 0.50

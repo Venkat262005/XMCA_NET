@@ -325,14 +325,15 @@ def main():
                 # RAG datasets (A-OKVQA, InfoSeek):
                 # An open-domain knowledge question primarily tests external knowledge retrieval and utilization.
                 # 1. Blatant visual perception contradiction:
-                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.40:
+                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.35:
                     cause_label = 0  # Visual perception failure
-                # 2. Knowledge retrieval miss (evidence missing or low relevance score):
-                elif r_res.sr_score < 0.45 or r_res.retrieval_failure_category in ("missing_evidence", "weakly_retrieved") or r_res.top_relevance_score < 0.45:
+                # 2. Knowledge retrieval failure (evidence completely missing or irrelevant):
+                elif r_res.retrieval_failure_category == "missing_evidence" or r_res.top_relevance_score < 0.25 or len(r_res.retrieved_doc_ids) == 0:
                     cause_label = 1  # Knowledge retrieval failure
-                # 3. Evidence utilization failure (retrieval succeeded, but model contradicted or failed to use evidence):
-                elif r_res.sr_score >= 0.45 and (u_res.contradiction_ratio >= 0.15 or u_res.unsupported_claim_ratio >= 0.35 or u_res.su_score < 0.50):
+                # 3. Evidence utilization failure (retriever provided evidence, but model ignored, contradicted, or failed to ground on it):
+                elif u_res.contradiction_ratio >= 0.10 or u_res.unsupported_claim_ratio >= 0.25 or u_res.su_score < 0.60:
                     cause_label = 2  # Evidence utilization failure
+                # 4. Fallback: retriever supplied misleading / distracting context that misled the model:
                 else:
                     cause_label = 1  # Knowledge retrieval failure
         else:
