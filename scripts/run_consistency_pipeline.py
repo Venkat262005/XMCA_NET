@@ -77,11 +77,14 @@ def build_authentic_ground_truth_map() -> Dict[str, Dict[str, Any]]:
         pope_records = loader.load_pope()
         for p in pope_records:
             gt_ans = p.official_answer_fields.get("label", "").strip().lower()
+            q_text = p.raw_record.get("text", "")
+            pope_m = re.search(r"is there (?:a |an |any )?([a-zA-Z\s]+?)(?: in the image|\son the\b|\sin the\b|\son\b|\sin\b|\?)", q_text.lower())
+            target_obj = pope_m.group(1).strip() if pope_m else q_text.split()[-1].rstrip("?.!,")
             gt_map[p.original_sample_id] = {
                 "pope_target_answer": gt_ans,
                 "cause_label": 0,  # Perception
                 "category": "pope",
-                "gt_objects": [p.raw_record.get("text", "").split()[-1].rstrip("?.!,")] if gt_ans == "yes" else [],
+                "gt_objects": [target_obj] if gt_ans == "yes" else [],
             }
     except Exception as e:
         print(f"Warning: could not load POPE ground truth: {e}")
