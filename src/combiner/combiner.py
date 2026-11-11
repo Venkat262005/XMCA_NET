@@ -297,21 +297,8 @@ class XMCAAttributionHead:
                 evidence_summary="Model generated faithful response consistent across diagnostic axes.",
             )
 
-        # 2. Non-RAG datasets (POPE, FaithScore): RAG is masked out, failure is strictly perception
-        if feature_vector.m_r == 1.0 and feature_vector.m_u == 1.0:
-            return AttributionPrediction(
-                sample_id=feature_vector.sample_id,
-                is_hallucination=True,
-                attributed_cause="perception",
-                attribution_probabilities={"perception": 1.0, "retrieval": 0.0, "utilization": 0.0},
-                confidence=round(float(1.0 - feature_vector.sp_score), 4),
-                evidence_summary=(
-                    f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
-                    f"contradiction={feature_vector.visual_contradiction_ratio:.2f})."
-                ),
-            )
-
-        # 3. Neural attribution inference for RAG-applicable datasets
+        # 2. Neural cause-attribution inference across all benchmark samples
+        # Every detected hallucination is evaluated by the neural attribution network without hardcoded heuristic bypasses
         if combiner is not None and self.is_trained:
             combiner.model.eval()
             self.network.eval()
@@ -330,25 +317,25 @@ class XMCAAttributionHead:
                 "utilization": round(float(probs[2]), 4),
             }
             causes = ["perception", "retrieval", "utilization"]
-            sorted_indices = np.argsort(probs)
-            top_idx = int(sorted_indices[-1])
-            second_idx = int(sorted_indices[-2])
-            max_prob = float(probs[top_idx])
-            prob_margin = float(probs[top_idx] - probs[second_idx])
+            best_idx = int(np.argmax(probs))
 
-            # Scientifically principled attribution: flag as unattributed / diffuse reasoning error
-            # when no cause achieves sufficient prominence (max_prob < 0.42) or when top two causes are ambiguous (margin < 0.12)
-            if max_prob < 0.42 or prob_margin < 0.12:
+            # Information-theoretic diagnostic uncertainty via normalized Shannon entropy: H(p) / ln(3) in [0.0, 1.0]
+            entropy = -float(np.sum(probs * np.log(probs + 1e-9)))
+            norm_entropy = float(entropy / np.log(3.0))
+            diagnostic_confidence = round(float(1.0 - norm_entropy), 4)
+
+            # High diagnostic entropy indicates diffuse / compound multi-axis failure
+            if norm_entropy > 0.85:
                 attributed = "unattributed"
-                confidence = round(max_prob, 4)
+                confidence = diagnostic_confidence
                 summary = (
-                    f"Unattributed / diffuse reasoning error: multi-axis failure scores diffuse "
-                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f}, "
-                    f"margin={prob_margin:.2f})."
+                    f"Unattributed / diffuse reasoning error: multi-axis diagnostic entropy high "
+                    f"(H_norm={norm_entropy:.2f}, P={prob_dict['perception']:.2f}, "
+                    f"R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f})."
                 )
             else:
-                attributed = causes[top_idx]
-                confidence = round(max_prob, 4)
+                attributed = causes[best_idx]
+                confidence = round(float(probs[best_idx]), 4)
                 if attributed == "perception":
                     summary = (
                         f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
@@ -365,43 +352,41 @@ class XMCAAttributionHead:
                         f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
                     )
         else:
-            # Deterministic multi-axis diagnostic fallback comparison
-            p_fail = (1.0 - feature_vector.sp_score) + feature_vector.visual_contradiction_ratio * 0.5
-            r_fail = (1.0 - feature_vector.sr_score) if feature_vector.m_r == 0.0 else 0.0
-            u_fail = (
-                (1.0 - feature_vector.su_score)
-                + feature_vector.unsupported_claim_ratio * 0.5
-                + feature_vector.contradiction_ratio * 0.5
-                if feature_vector.m_u == 0.0
-                else 0.0
-            )
+            # Deterministic multi-axis diagnostic fallback comparison (active only if neural network is unfitted)
+            if feature_vector.m_r == 1.0 and feature_vector.m_u == 1.0:
+                probs = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+            else:
+                p_fail = (1.0 - feature_vector.sp_score) + feature_vector.visual_contradiction_ratio * 0.5
+                r_fail = (1.0 - feature_vector.sr_score) * (1.0 - feature_vector.m_r)
+                u_fail = (
+                    (1.0 - feature_vector.su_score)
+                    + feature_vector.unsupported_claim_ratio * 0.5
+                    + feature_vector.contradiction_ratio * 0.5
+                ) * (1.0 - feature_vector.m_u)
 
-            scores = np.array([p_fail, r_fail, u_fail], dtype=np.float64)
-            exp_s = np.exp(scores - np.max(scores))
-            probs = exp_s / np.sum(exp_s)
+                scores = np.array([p_fail, r_fail, u_fail], dtype=np.float64)
+                exp_s = np.exp(scores - np.max(scores))
+                probs = exp_s / np.sum(exp_s)
+
             prob_dict = {
                 "perception": round(float(probs[0]), 4),
                 "retrieval": round(float(probs[1]), 4),
                 "utilization": round(float(probs[2]), 4),
             }
             causes = ["perception", "retrieval", "utilization"]
-            sorted_indices = np.argsort(probs)
-            top_idx = int(sorted_indices[-1])
-            second_idx = int(sorted_indices[-2])
-            max_prob = float(probs[top_idx])
-            prob_margin = float(probs[top_idx] - probs[second_idx])
+            best_idx = int(np.argmax(probs))
 
-            if max_prob < 0.42 or prob_margin < 0.12:
+            entropy = -float(np.sum(probs * np.log(probs + 1e-9)))
+            norm_entropy = float(entropy / np.log(3.0))
+            diagnostic_confidence = round(float(1.0 - norm_entropy), 4)
+
+            if norm_entropy > 0.85:
                 attributed = "unattributed"
-                confidence = round(max_prob, 4)
-                summary = (
-                    f"Unattributed / diffuse reasoning error: multi-axis failure scores diffuse "
-                    f"(P={prob_dict['perception']:.2f}, R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f}, "
-                    f"margin={prob_margin:.2f})."
-                )
+                confidence = diagnostic_confidence
+                summary = "Unattributed reasoning error across diagnostic axes."
             else:
-                attributed = causes[top_idx]
-                confidence = round(max_prob, 4)
+                attributed = causes[best_idx]
+                confidence = round(float(probs[best_idx]), 4)
                 if attributed == "perception":
                     summary = (
                         f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "

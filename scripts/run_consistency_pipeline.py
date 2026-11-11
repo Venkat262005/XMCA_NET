@@ -291,13 +291,12 @@ def main():
         claims_res = claim_extractor.extract_claims(sample_id, generated_text, question=question)
 
         # Step 5b: Perception consistency (S_P) via zero-shot OWL-ViT visual grounding
+        # Note: ground_truth_objects are strictly omitted to guarantee zero label leakage during inference
         p_res = p_estimator.compute_sp(
             sample_id=sample_id,
             image_id=image_id,
             claims=claims_res.claims,
             image_path=image_path,
-            ground_truth_objects=gt_objects,
-            negative_objects=neg_objects,
         )
 
         # Step 5c: Retrieval consistency (S_R) via Neural Cross-Encoder
@@ -317,23 +316,32 @@ def main():
             retrieval_result=r_result,
         )
 
-        # Authentic ground-truth root-cause diagnosis for training
+        # Objective ground-truth root-cause supervision for training the neural attribution head
         if gt_label == 1:
             if dataset_id in ("pope", "faithscore"):
-                cause_label = 0  # Perception failure (visual grounding)
+                # POPE and FaithScore explicitly evaluate visual object perception and descriptive grounding
+                cause_label = 0  # Perception failure
             else:
-                # RAG datasets (A-OKVQA, InfoSeek):
+                # Knowledge-seeking RAG datasets (InfoSeek, A-OKVQA):
                 # An open-domain knowledge question primarily tests external knowledge retrieval and utilization.
-                # 1. Blatant visual perception contradiction:
-                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.35:
+                # Determine cause based on whether the retriever found the ground-truth answer in the 128k corpus:
+                accepted = gt_entry.get("accepted_answers", [])
+                gold_in_retrieval = False
+                if r_result and r_result.retrieved_passages and accepted:
+                    for passage in r_result.retrieved_passages:
+                        p_clean = passage.passage_text.lower()
+                        if any(ans in p_clean for ans in accepted if len(ans) >= 2):
+                            gold_in_retrieval = True
+                            break
+
+                # 1. Blatant visual perception contradiction (model contradicted the image itself):
+                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.50:
                     cause_label = 0  # Visual perception failure
-                # 2. Knowledge retrieval failure (evidence completely missing or irrelevant):
-                elif r_res.retrieval_failure_category == "missing_evidence" or r_res.top_relevance_score < 0.25 or len(r_res.retrieved_doc_ids) == 0:
-                    cause_label = 1  # Knowledge retrieval failure
-                # 3. Evidence utilization failure (retriever provided evidence, but model ignored, contradicted, or failed to ground on it):
-                elif u_res.contradiction_ratio >= 0.10 or u_res.unsupported_claim_ratio >= 0.25 or u_res.su_score < 0.60:
+                # 2. Evidence utilization failure (retriever successfully retrieved passages containing the gold answer,
+                # yet the model failed to utilize that evidence and generated a hallucinated response):
+                elif gold_in_retrieval:
                     cause_label = 2  # Evidence utilization failure
-                # 4. Fallback: retriever supplied misleading / distracting context that misled the model:
+                # 3. Knowledge retrieval failure (retriever failed to find any passage containing the gold answer in the corpus):
                 else:
                     cause_label = 1  # Knowledge retrieval failure
         else:
