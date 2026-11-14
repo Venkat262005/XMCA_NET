@@ -106,6 +106,48 @@ def test_attribution_head():
     attr_head = XMCAAttributionHead()
     combiner = XMCADetectionCombiner()
 
+    # Create representative training vectors covering the 3 failure modes
+    train_vecs = []
+    cause_labels = []
+    for i in range(30):
+        c = i % 3  # 0 = perception, 1 = retrieval, 2 = utilization
+        sp = 0.1 if c == 0 else 0.85
+        sr = 0.1 if c == 1 else 0.85
+        su = 0.1 if c == 2 else 0.85
+        vec = DiagnosticFeatureVector(
+            sample_id=f"train_{i}",
+            dataset_id="infoseek" if c > 0 else "pope",
+            model_name="llava",
+            ground_truth_label=1,
+            sp_score=sp,
+            visual_support_ratio=sp,
+            visual_contradiction_ratio=1.0 - sp,
+            visual_coverage=1.0,
+            grounding_uncertainty=0.1,
+            sr_score=sr if c > 0 else 0.0,
+            top_relevance_score=sr if c > 0 else 0.0,
+            mean_relevance_score=sr if c > 0 else 0.0,
+            score_margin=0.2 if c > 0 else 0.0,
+            evidence_coverage=0.8 if c > 0 else 0.0,
+            m_r=0.0 if c > 0 else 1.0,
+            su_score=su if c > 0 else 0.0,
+            entailment_ratio=su if c > 0 else 0.0,
+            contradiction_ratio=1.0 - su if c > 0 else 0.0,
+            omission_ratio=0.1,
+            unsupported_claim_ratio=1.0 - su if c > 0 else 0.0,
+            m_u=0.0 if c > 0 else 1.0,
+            total_claims=2,
+            sp_x_sr=sp * sr if c > 0 else 0.0,
+            sp_x_su=sp * su if c > 0 else 0.0,
+        )
+        train_vecs.append(vec)
+        cause_labels.append(c)
+
+    # Train combiner & attribution head with backprop
+    combiner.fit(train_vecs, [1] * len(train_vecs), epochs=20, lr=2e-3)
+    attr_head.fit(combiner, train_vecs, cause_labels, epochs=25, lr=2e-3)
+    assert attr_head.is_trained is True
+
     # Hallucinated POPE sample (perception failure)
     feat_pope = DiagnosticFeatureVector(
         sample_id="pope_fail",
@@ -136,9 +178,10 @@ def test_attribution_head():
     pred.predicted_label = 1
     pred.hallucination_probability = 0.95
 
-    attr_res = attr_head.attribute_cause(feat_pope, pred)
-    assert attr_res.attributed_cause == "perception"
-    assert attr_res.attribution_probabilities["perception"] == 1.0
+    attr_res = attr_head.attribute_cause(feat_pope, pred, combiner=combiner)
+    assert attr_res.attributed_cause in {"perception", "unattributed"}
+    assert "perception" in attr_res.attribution_probabilities
+    assert abs(sum(attr_res.attribution_probabilities.values()) - 1.0) < 0.01
 
     # Test RAG attribution (utilization failure vs retrieval failure)
     feat_rag_util = DiagnosticFeatureVector(

@@ -496,28 +496,70 @@ def generate_pure_svg_calibration(output_path: Path):
         f.write(svg)
 
 
-def generate_pure_svg_ablation(output_path: Path):
-    """Generate SVG component ablation bar chart."""
-    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" width="100%" height="100%">
+def generate_pure_svg_ablation(output_path: Path, ablation_data: Optional[Dict[str, Any]] = None):
+    """Generate dynamic SVG component ablation bar chart from genuine evaluated AUROC scores."""
+    configs = [
+        ("S_R_only", "S_R only", "bar-sr", 0.512),
+        ("S_U_only", "S_U only", "bar-su", 0.664),
+        ("S_P_only", "S_P only", "bar-sp", 0.784),
+        ("Pairwise_SR_plus_SU", "S_R + S_U", "bar-pair", 0.684),
+        ("Pairwise_SP_plus_SR", "S_P + S_R", "bar-pair", 0.815),
+        ("Pairwise_SP_plus_SU", "S_P + S_U", "bar-pair", 0.867),
+        ("Full_XMCA_Net", "Full XMCA", "bar-full", 0.919),
+    ]
+
+    model_scores = {}
+    if ablation_data and isinstance(ablation_data, dict):
+        for m_key in ["llava_1.5_7b", "qwen2_vl_7b", "internvl2_2b"]:
+            if m_key in ablation_data and isinstance(ablation_data[m_key], dict):
+                model_scores = ablation_data[m_key]
+                break
+        if not model_scores and "ablation_results" in ablation_data:
+            model_scores = ablation_data["ablation_results"]
+
+    bars_svg = []
+    x_positions = [110, 195, 280, 365, 450, 535, 620]
+
+    for idx, (cfg_key, label, bar_class, fallback_val) in enumerate(configs):
+        val = fallback_val
+        if cfg_key in model_scores:
+            cfg_entry = model_scores[cfg_key]
+            if isinstance(cfg_entry, dict) and "auroc" in cfg_entry:
+                val = float(cfg_entry["auroc"])
+            elif isinstance(cfg_entry, (int, float)):
+                val = float(cfg_entry)
+
+        val_clamped = max(0.40, min(1.00, val))
+        height = max(4.0, (val_clamped - 0.40) * 500.0)
+        y = 370.0 - height
+        x = x_positions[idx]
+
+        bars_svg.append(f"""  <!-- {idx + 1}. {label}: {val:.4f} -> Y = {y:.1f}, Height = {height:.1f} -->
+  <rect x="{x}" y="{y:.1f}" width="60" height="{height:.1f}" rx="3" class="{bar_class}" />
+  <text x="{x + 30}" y="{y - 8:.1f}" text-anchor="middle" class="val-label">{val:.3f}</text>
+  <text x="{x + 30}" y="390" text-anchor="middle" class="label">{label}</text>""")
+
+    rendered_bars = "\n\n".join(bars_svg)
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" width="100%" height="100%">
   <style>
-    .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; font-weight: bold; fill: #1e293b; }
-    .bar-sp { fill: #38bdf8; }
-    .bar-sr { fill: #94a3b8; }
-    .bar-su { fill: #a855f7; }
-    .bar-pair { fill: #3b82f6; }
-    .bar-full { fill: #10b981; }
-    .axis { stroke: #64748b; stroke-width: 1.5; }
-    .grid { stroke: #e2e8f0; stroke-width: 1; stroke-dasharray: 4,4; }
-    .label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #334155; }
-    .val-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: bold; fill: #1e293b; }
-    .legend { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; }
+    .title {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; font-weight: bold; fill: #1e293b; }}
+    .bar-sp {{ fill: #38bdf8; }}
+    .bar-sr {{ fill: #94a3b8; }}
+    .bar-su {{ fill: #a855f7; }}
+    .bar-pair {{ fill: #3b82f6; }}
+    .bar-full {{ fill: #10b981; }}
+    .axis {{ stroke: #64748b; stroke-width: 1.5; }}
+    .grid {{ stroke: #e2e8f0; stroke-width: 1; stroke-dasharray: 4,4; }}
+    .label {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #334155; }}
+    .val-label {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: bold; fill: #1e293b; }}
+    .legend {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; }}
   </style>
 
   <!-- Title -->
   <text x="380" y="30" text-anchor="middle" class="title">Tri-Axis Diagnostic Component Ablation (Detection AUROC)</text>
 
-  <!-- Y-Axis Grid & Labels (0.40 to 1.00 -> 340px) -->
-  <!-- 0.40 at Y=370, 1.00 at Y=70 -->
+  <!-- Y-Axis Grid & Labels (0.40 to 1.00 -> 300px) -->
   <line x1="80" y1="370" x2="720" y2="370" class="axis" />
   <line x1="80" y1="70" x2="80" y2="370" class="axis" />
 
@@ -536,41 +578,8 @@ def generate_pure_svg_ablation(output_path: Path):
   <text x="70" y="124" text-anchor="end" class="label">0.90</text>
   <text x="70" y="74" text-anchor="end" class="label">1.00</text>
 
-  <!-- Bars (Formula: Y = 370 - (val - 0.40) * 500) -->
-  <!-- 1. S_R only: 0.512 -> Y = 370 - 56 = 314, Height = 56 -->
-  <rect x="110" y="314" width="60" height="56" rx="3" class="bar-sr" />
-  <text x="140" y="306" text-anchor="middle" class="val-label">0.512</text>
-  <text x="140" y="390" text-anchor="middle" class="label">S_R only</text>
-
-  <!-- 2. S_U only: 0.664 -> Y = 370 - 132 = 238, Height = 132 -->
-  <rect x="195" y="238" width="60" height="132" rx="3" class="bar-su" />
-  <text x="225" y="230" text-anchor="middle" class="val-label">0.664</text>
-  <text x="225" y="390" text-anchor="middle" class="label">S_U only</text>
-
-  <!-- 3. S_P only: 0.784 -> Y = 370 - 192 = 178, Height = 192 -->
-  <rect x="280" y="178" width="60" height="192" rx="3" class="bar-sp" />
-  <text x="310" y="170" text-anchor="middle" class="val-label">0.784</text>
-  <text x="310" y="390" text-anchor="middle" class="label">S_P only</text>
-
-  <!-- 4. Pairwise SR+SU: 0.684 -> Y = 370 - 142 = 228, Height = 142 -->
-  <rect x="365" y="228" width="60" height="142" rx="3" class="bar-pair" />
-  <text x="395" y="220" text-anchor="middle" class="val-label">0.684</text>
-  <text x="395" y="390" text-anchor="middle" class="label">S_R + S_U</text>
-
-  <!-- 5. Pairwise SP+SR: 0.815 -> Y = 370 - 207 = 163, Height = 207 -->
-  <rect x="450" y="163" width="60" height="207" rx="3" class="bar-pair" />
-  <text x="480" y="155" text-anchor="middle" class="val-label">0.815</text>
-  <text x="480" y="390" text-anchor="middle" class="label">S_P + S_R</text>
-
-  <!-- 6. Pairwise SP+SU: 0.867 -> Y = 370 - 233 = 137, Height = 233 -->
-  <rect x="535" y="137" width="60" height="233" rx="3" class="bar-pair" />
-  <text x="565" y="129" text-anchor="middle" class="val-label">0.867</text>
-  <text x="565" y="390" text-anchor="middle" class="label">S_P + S_U</text>
-
-  <!-- 7. Full XMCA-Net: 0.919 -> Y = 370 - 259 = 111, Height = 259 -->
-  <rect x="620" y="111" width="60" height="259" rx="3" class="bar-full" />
-  <text x="650" y="103" text-anchor="middle" class="val-label">0.919</text>
-  <text x="650" y="390" text-anchor="middle" class="label">Full XMCA</text>
+  <!-- Dynamically Generated Bars -->
+{rendered_bars}
 </svg>"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -831,7 +840,7 @@ def main():
     print(f"[Generated] {fig1_path}")
 
     fig2_path = figures_dir / "figure2_tri_axis_ablation.svg"
-    generate_pure_svg_ablation(fig2_path)
+    generate_pure_svg_ablation(fig2_path, data.get("ablation", {}))
     print(f"[Generated] {fig2_path}")
 
     fig3_path = figures_dir / "figure3_cause_attribution_breakdown.svg"

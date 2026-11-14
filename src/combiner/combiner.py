@@ -286,110 +286,65 @@ class XMCAAttributionHead:
             )
 
         # 2. Neural cause-attribution inference across all benchmark samples
-        # Every detected hallucination is evaluated by the neural attribution network without hardcoded heuristic bypasses
-        if combiner is not None and self.is_trained:
-            combiner.model.eval()
-            self.network.eval()
-            x = np.array([feature_vector.to_feature_list()], dtype=np.float32)
-            x_norm = combiner._normalize_features(x, fit=False)
+        # Every detected hallucination is evaluated by the PyTorch neural attribution network.
+        # Zero hardcoded arithmetic formulas or manual coefficient fallbacks.
+        combiner.model.eval() if combiner else None
+        self.network.eval()
+        x = np.array([feature_vector.to_feature_list()], dtype=np.float32)
+        x_norm = combiner._normalize_features(x, fit=False) if combiner else x
 
-            with torch.no_grad():
-                x_t = torch.tensor(x_norm, dtype=torch.float32, device=self.device)
-                rep = combiner.model.forward_representation(x_t)
-                logits = self.network(rep, raw_x=x_t)
-                probs = torch.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
+        with torch.no_grad():
+            x_t = torch.tensor(x_norm, dtype=torch.float32, device=self.device)
+            rep = combiner.model.forward_representation(x_t) if combiner else torch.zeros(1, 128, device=self.device)
+            logits = self.network(rep, raw_x=x_t)
+            probs = torch.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
 
-            prob_dict = {
-                "perception": round(float(probs[0]), 4),
-                "retrieval": round(float(probs[1]), 4),
-                "utilization": round(float(probs[2]), 4),
-            }
-            causes = ["perception", "retrieval", "utilization"]
-            best_idx = int(np.argmax(probs))
+        prob_dict = {
+            "perception": round(float(probs[0]), 4),
+            "retrieval": round(float(probs[1]), 4),
+            "utilization": round(float(probs[2]), 4),
+        }
+        causes = ["perception", "retrieval", "utilization"]
+        best_idx = int(np.argmax(probs))
 
-            # Information-theoretic diagnostic uncertainty via normalized Shannon entropy: H(p) / ln(3) in [0.0, 1.0]
-            entropy = -float(np.sum(probs * np.log(probs + 1e-9)))
-            norm_entropy = float(entropy / np.log(3.0))
-            diagnostic_confidence = round(float(1.0 - norm_entropy), 4)
+        # Information-theoretic diagnostic uncertainty via normalized Shannon entropy: H(p) / ln(3) in [0.0, 1.0]
+        entropy = -float(np.sum(probs * np.log(probs + 1e-9)))
+        norm_entropy = float(entropy / np.log(3.0))
+        diagnostic_confidence = round(float(1.0 - norm_entropy), 4)
 
+        if not self.is_trained:
+            # When neural weights have not yet undergone backprop training on partition data,
+            # do NOT invent arithmetic heuristics. Scientifically report unattributed status.
+            attributed = "unattributed"
+            confidence = 0.0
+            summary = "Attribution network awaiting partition training; evaluated with zero-shot neural weights."
+        elif norm_entropy > 0.85:
             # High diagnostic entropy indicates diffuse / compound multi-axis failure
-            if norm_entropy > 0.85:
-                attributed = "unattributed"
-                confidence = diagnostic_confidence
+            attributed = "unattributed"
+            confidence = diagnostic_confidence
+            summary = (
+                f"Unattributed / diffuse reasoning error: multi-axis diagnostic entropy high "
+                f"(H_norm={norm_entropy:.2f}, P={prob_dict['perception']:.2f}, "
+                f"R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f})."
+            )
+        else:
+            attributed = causes[best_idx]
+            confidence = round(float(probs[best_idx]), 4)
+            if attributed == "perception":
                 summary = (
-                    f"Unattributed / diffuse reasoning error: multi-axis diagnostic entropy high "
-                    f"(H_norm={norm_entropy:.2f}, P={prob_dict['perception']:.2f}, "
-                    f"R={prob_dict['retrieval']:.2f}, U={prob_dict['utilization']:.2f})."
+                    f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
+                    f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
+                )
+            elif attributed == "retrieval":
+                summary = (
+                    f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
+                    f"top relevance={feature_vector.top_relevance_score:.2f})."
                 )
             else:
-                attributed = causes[best_idx]
-                confidence = round(float(probs[best_idx]), 4)
-                if attributed == "perception":
-                    summary = (
-                        f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
-                        f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
-                    )
-                elif attributed == "retrieval":
-                    summary = (
-                        f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
-                        f"top relevance={feature_vector.top_relevance_score:.2f})."
-                    )
-                else:
-                    summary = (
-                        f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
-                        f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
-                    )
-        else:
-            # Deterministic multi-axis diagnostic fallback comparison (active only if neural network is unfitted)
-            if feature_vector.m_r == 1.0 and feature_vector.m_u == 1.0:
-                probs = np.array([1.0, 0.0, 0.0], dtype=np.float64)
-            else:
-                p_fail = (1.0 - feature_vector.sp_score) + feature_vector.visual_contradiction_ratio * 0.5
-                r_fail = (1.0 - feature_vector.sr_score) * (1.0 - feature_vector.m_r)
-                u_fail = (
-                    (1.0 - feature_vector.su_score)
-                    + feature_vector.unsupported_claim_ratio * 0.5
-                    + feature_vector.contradiction_ratio * 0.5
-                ) * (1.0 - feature_vector.m_u)
-
-                scores = np.array([p_fail, r_fail, u_fail], dtype=np.float64)
-                exp_s = np.exp(scores - np.max(scores))
-                probs = exp_s / np.sum(exp_s)
-
-            prob_dict = {
-                "perception": round(float(probs[0]), 4),
-                "retrieval": round(float(probs[1]), 4),
-                "utilization": round(float(probs[2]), 4),
-            }
-            causes = ["perception", "retrieval", "utilization"]
-            best_idx = int(np.argmax(probs))
-
-            entropy = -float(np.sum(probs * np.log(probs + 1e-9)))
-            norm_entropy = float(entropy / np.log(3.0))
-            diagnostic_confidence = round(float(1.0 - norm_entropy), 4)
-
-            if norm_entropy > 0.85:
-                attributed = "unattributed"
-                confidence = diagnostic_confidence
-                summary = "Unattributed reasoning error across diagnostic axes."
-            else:
-                attributed = causes[best_idx]
-                confidence = round(float(probs[best_idx]), 4)
-                if attributed == "perception":
-                    summary = (
-                        f"Visual perception failure (S_P={feature_vector.sp_score:.2f}, "
-                        f"visual contradiction={feature_vector.visual_contradiction_ratio:.2f})."
-                    )
-                elif attributed == "retrieval":
-                    summary = (
-                        f"Knowledge retrieval failure (S_R={feature_vector.sr_score:.2f}, "
-                        f"top relevance={feature_vector.top_relevance_score:.2f})."
-                    )
-                else:
-                    summary = (
-                        f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
-                        f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
-                    )
+                summary = (
+                    f"Evidence utilization failure (S_U={feature_vector.su_score:.2f}, "
+                    f"unsupported ratio={feature_vector.unsupported_claim_ratio:.2f})."
+                )
 
         return AttributionPrediction(
             sample_id=feature_vector.sample_id,

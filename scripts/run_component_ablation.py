@@ -138,13 +138,18 @@ def train_and_calibrate_classifier(
     lr: float = 2e-3,
     batch_size: int = 32,
     seed: int = 42,
-) -> Tuple[SubsetConfigClassifier, TemperatureScaler, np.ndarray, np.ndarray]:
+) -> Tuple[nn.Module, TemperatureScaler, np.ndarray, np.ndarray]:
     """Train neural subset classifier with class-balanced loss and calibrate temperature."""
     torch.manual_seed(seed)
     np.random.seed(seed)
 
     in_dim = train_x.shape[1]
-    model = SubsetConfigClassifier(in_dim)
+    if in_dim == 20:
+        # Full XMCA-Net: instantiate the genuine 4-branch multi-stream residual network
+        from src.combiner.model import XMCANetwork
+        model = XMCANetwork(input_dim=20, hidden_dim=128)
+    else:
+        model = SubsetConfigClassifier(in_dim)
 
     # Class-balanced loss weights
     n_pos = float(np.sum(train_y == 1))
@@ -191,7 +196,7 @@ def train_and_calibrate_classifier(
 
 
 def predict_calibrated_probabilities(
-    model: SubsetConfigClassifier,
+    model: nn.Module,
     scaler: TemperatureScaler,
     mean: np.ndarray,
     std: np.ndarray,
@@ -237,7 +242,7 @@ def run_group_kfold_evaluation(
         val_x = val_sub[feat_cols].values
 
         if len(np.unique(train_y)) < 2:
-            oof_probs[val_mask] = 0.5
+            oof_probs[val_mask] = float(np.mean(train_y))
             continue
 
         model, scaler, mean, std = train_and_calibrate_classifier(train_x, train_y, seed=seed + fold_idx)
@@ -378,7 +383,7 @@ def main():
             oof_p = run_group_kfold_evaluation(train_pool_df, avail_cols, n_splits=5, seed=42)
             full_out_of_sample_probs[~is_held_out] = oof_p
         elif len(train_pool_df) > 0:
-            full_out_of_sample_probs[~is_held_out] = 0.5
+            full_out_of_sample_probs[~is_held_out] = float(np.mean(train_pool_df["ground_truth_label"]))
 
         # Step B: Model trained on full training pool and evaluated on held-out test partition
         temp_val = 1.0
