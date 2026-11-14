@@ -20,6 +20,7 @@ class DiagnosticFeatureVector(BaseModel):
     dataset_id: str
     model_name: str
     ground_truth_label: Optional[int] = None  # 1 = hallucination, 0 = faithful
+    cause_label: Optional[int] = None  # 0 = perception, 1 = retrieval, 2 = utilization, None = faithful
 
     # Perception features
     sp_score: float
@@ -115,6 +116,7 @@ class FeatureExtractor:
         r_res: RetrievalDiagnosticResult,
         u_res: UtilizationDiagnosticResult,
         ground_truth_label: Optional[int] = None,
+        cause_label: Optional[int] = None,
     ) -> DiagnosticFeatureVector:
         """Combine diagnostic outputs into a single aligned feature record."""
         # Cross-modal interaction terms (zeroed if axis is masked/inapplicable)
@@ -126,6 +128,7 @@ class FeatureExtractor:
             dataset_id=dataset_id,
             model_name=model_name,
             ground_truth_label=ground_truth_label,
+            cause_label=cause_label,
             sp_score=p_res.sp_score,
             visual_support_ratio=p_res.visual_support_ratio,
             visual_contradiction_ratio=p_res.visual_contradiction_ratio,

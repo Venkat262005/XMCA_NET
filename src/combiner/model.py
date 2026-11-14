@@ -374,3 +374,198 @@ class TemperatureScaler(nn.Module):
             return loss
 
         optimizer.step(eval_loss)
+
+
+# ---------------------------------------------------------------------------
+# Level 2 Architectural Ablation Models
+# ---------------------------------------------------------------------------
+
+class LinearFusionClassifier(nn.Module):
+    """Ablation N0: Logistic regression / pure linear fusion baseline.
+    
+    Demonstrates whether non-linear multimodal representations are necessary.
+    """
+
+    def __init__(self, in_features: int):
+        super().__init__()
+        self.linear = nn.Linear(in_features, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.linear(x).squeeze(-1)
+
+
+class SimpleConcatMLP(nn.Module):
+    """Ablation N1: Simple concatenation + standard FeedForward MLP.
+    
+    Lacks modality tokenization, residual connections, and cross-attention mechanisms.
+    """
+
+    def __init__(self, in_features: int, hidden_dim: int = 128, dropout: float = 0.10):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_features, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.LayerNorm(hidden_dim // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, 32),
+            nn.GELU(),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x).squeeze(-1)
+
+
+class TransformerBlockNoResidual(nn.Module):
+    """Transformer Encoder layer strictly without residual connections."""
+
+    def __init__(self, d_model: int = 64, n_heads: int = 8, dim_feedforward: int = 256, dropout: float = 0.10):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.norm2 = nn.LayerNorm(d_model)
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, d_model),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Pre-LN Self-Attention WITHOUT residual skip
+        norm_x = self.norm1(x)
+        attn_out, _ = self.attn(query=norm_x, key=norm_x, value=norm_x)
+        # Pre-LN Feed-Forward WITHOUT residual skip
+        out = self.mlp(self.norm2(attn_out))
+        return out
+
+
+class XMCANoResidual(nn.Module):
+    """Ablation N2: Cross-Modal Transformer architecture without gating/residual bypasses."""
+
+    def __init__(self, input_dim: int = 20, hidden_dim: int = 128, d_model: int = 64, n_heads: int = 8):
+        super().__init__()
+        self.input_dim = input_dim
+        self.d_model = d_model
+        
+        self.vision_proj = ModalityProjectionToken(5, d_model)
+        self.retrieval_proj = ModalityProjectionToken(6, d_model)
+        self.utilization_proj = ModalityProjectionToken(6, d_model)
+        self.interaction_proj = ModalityProjectionToken(3, d_model)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+        
+        # 3 layers without residual connections
+        self.layers = nn.ModuleList([
+            TransformerBlockNoResidual(d_model=d_model, n_heads=n_heads)
+            for _ in range(3)
+        ])
+        self.pool_proj = nn.Sequential(
+            nn.Linear(d_model * 2, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, 32),
+            nn.GELU(),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B = x.shape[0]
+        t_v = self.vision_proj(x[:, 0:5]).unsqueeze(1)
+        t_r = self.retrieval_proj(x[:, 5:11]).unsqueeze(1)
+        t_u = self.utilization_proj(x[:, 11:17]).unsqueeze(1)
+        t_i = self.interaction_proj(x[:, 17:20]).unsqueeze(1)
+        cls_tok = self.cls_token.expand(B, -1, -1)
+        seq = torch.cat([cls_tok, t_v, t_r, t_u, t_i], dim=1)
+        
+        for layer in self.layers:
+            seq = layer(seq)
+            
+        cls_repr = seq[:, 0, :]
+        mean_modal = seq[:, 1:, :].mean(dim=1)
+        combined = torch.cat([cls_repr, mean_modal], dim=-1)
+        return self.pool_proj(combined).squeeze(-1)
+
+
+class XMCANoAttention(nn.Module):
+    """Ablation N3: Multimodal projection tokens fused without cross-modal self-attention."""
+
+    def __init__(self, input_dim: int = 20, hidden_dim: int = 128, d_model: int = 64):
+        super().__init__()
+        self.vision_proj = ModalityProjectionToken(5, d_model)
+        self.retrieval_proj = ModalityProjectionToken(6, d_model)
+        self.utilization_proj = ModalityProjectionToken(6, d_model)
+        self.interaction_proj = ModalityProjectionToken(3, d_model)
+        
+        # Linear concatenation fusion replacing multi-head attention
+        self.dense_fusion = nn.Sequential(
+            nn.Linear(d_model * 4, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            DenseResidualBlock(hidden_dim),
+            nn.Linear(hidden_dim, 32),
+            nn.GELU(),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        t_v = self.vision_proj(x[:, 0:5])
+        t_r = self.retrieval_proj(x[:, 5:11])
+        t_u = self.utilization_proj(x[:, 11:17])
+        t_i = self.interaction_proj(x[:, 17:20])
+        concat_tokens = torch.cat([t_v, t_r, t_u, t_i], dim=-1)
+        return self.dense_fusion(concat_tokens).squeeze(-1)
+
+
+class XMCAPureDetection(nn.Module):
+    """Ablation N4: Full XMCA architecture without root-cause attribution heads."""
+
+    def __init__(self, input_dim: int = 20, hidden_dim: int = 128, d_model: int = 64):
+        super().__init__()
+        self.net = XMCANetwork(input_dim=input_dim, hidden_dim=hidden_dim, d_model=d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class XMCAJointModel(nn.Module):
+    """Ablation N5, N6, C4: Complete XMCA Network with joint detection & attribution heads.
+    
+    Supports joint loss: L_total = L_det + lambda_attr * L_attr
+    - When lambda_attr = 0.0 (Ablation N5 / C1): attribution supervision is disabled.
+    - When lambda_attr > 0.0 (Ablation N6 / C4): multi-task attribution supervision is active.
+    """
+
+    def __init__(
+        self,
+        input_dim: int = 20,
+        hidden_dim: int = 128,
+        d_model: int = 64,
+        num_causes: int = 3,
+        dropout: float = 0.10,
+    ):
+        super().__init__()
+        self.detection_net = XMCANetwork(
+            input_dim=input_dim, hidden_dim=hidden_dim, d_model=d_model, dropout=dropout
+        )
+        self.attribution_net = XMCAAttributionNetwork(
+            hidden_dim=hidden_dim, raw_feat_dim=input_dim, num_causes=num_causes, d_model=d_model
+        )
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        rep = self.detection_net.forward_representation(x)
+        det_logits = self.detection_net.detection_head(rep).squeeze(-1)
+        attr_logits = self.attribution_net(rep, x)
+        return det_logits, attr_logits
+
+    def predict_detection(self, x: torch.Tensor) -> torch.Tensor:
+        return self.detection_net(x)

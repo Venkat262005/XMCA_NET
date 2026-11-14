@@ -25,6 +25,7 @@ class DetectionEvaluationMetrics(BaseModel):
     accuracy: float
     precision: float
     recall: float
+    specificity: float
     f1_score: float
     sample_count: int
     positive_count: int
@@ -75,6 +76,7 @@ class MetricEvaluator:
         acc = (tp + tn) / max(1, n_samples)
         prec = tp / max(1, tp + fp)
         rec = tp / max(1, tp + fn)
+        spec = tn / max(1, tn + fp)
         f1 = (2 * prec * rec) / max(1e-7, prec + rec)
 
         return DetectionEvaluationMetrics(
@@ -85,11 +87,68 @@ class MetricEvaluator:
             accuracy=round(float(acc), 4),
             precision=round(float(prec), 4),
             recall=round(float(rec), 4),
+            specificity=round(float(spec), 4),
             f1_score=round(float(f1), 4),
             sample_count=n_samples,
             positive_count=n_pos,
             negative_count=n_neg,
         )
+
+    def compute_multi_label_attribution_metrics(
+        self,
+        y_true_binary: np.ndarray,
+        y_pred_binary: np.ndarray,
+        class_names: Optional[List[str]] = None,
+    ) -> Dict[str, float]:
+        """Compute multi-label / multi-class cause attribution metrics.
+        
+        Args:
+            y_true_binary: Binary ground truth matrix of shape [N, num_causes] (0 or 1).
+            y_pred_binary: Binary prediction matrix of shape [N, num_causes] (0 or 1).
+            class_names: Names of causes (e.g., ['visual', 'retrieval', 'utilization']).
+            
+        Returns:
+            Dictionary with per-class F1, Precision, Recall, and Macro-F1.
+        """
+        if class_names is None:
+            class_names = ["visual", "retrieval", "utilization"]
+            
+        y_t = np.asarray(y_true_binary, dtype=int)
+        y_p = np.asarray(y_pred_binary, dtype=int)
+        
+        if y_t.ndim == 1:
+            # Convert 1D class indices to one-hot binary matrix
+            num_classes = len(class_names)
+            y_t = np.eye(num_classes)[y_t]
+            y_p = np.eye(num_classes)[y_p]
+            
+        n_classes = min(y_t.shape[1], len(class_names))
+        f1_list: List[float] = []
+        metrics: Dict[str, float] = {}
+        
+        for idx in range(n_classes):
+            c_name = class_names[idx]
+            yt_c = y_t[:, idx]
+            yp_c = y_p[:, idx]
+            
+            tp = int(np.sum((yp_c == 1) & (yt_c == 1)))
+            fp = int(np.sum((yp_c == 1) & (yt_c == 0)))
+            fn = int(np.sum((yp_c == 0) & (yt_c == 1)))
+            tn = int(np.sum((yp_c == 0) & (yt_c == 0)))
+            
+            p = tp / max(1, tp + fp)
+            r = tp / max(1, tp + fn)
+            f1 = (2 * p * r) / max(1e-7, p + r)
+            
+            metrics[f"{c_name}_f1"] = round(float(f1), 4)
+            metrics[f"{c_name}_precision"] = round(float(p), 4)
+            metrics[f"{c_name}_recall"] = round(float(r), 4)
+            f1_list.append(f1)
+            
+        metrics["macro_f1_attribution"] = round(float(np.mean(f1_list)), 4) if f1_list else 0.0
+        exact_match = float(np.mean(np.all(y_t == y_p, axis=1))) if len(y_t) > 0 else 0.0
+        metrics["exact_match_ratio"] = round(exact_match, 4)
+        return metrics
 
     def compute_attribution_accuracy(
         self,

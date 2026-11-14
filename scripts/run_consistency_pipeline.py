@@ -367,6 +367,7 @@ def main():
             r_res=r_res,
             u_res=u_res,
             ground_truth_label=gt_label,
+            cause_label=cause_label,
         )
         feature_vectors.append(feat_vec)
         cause_labels_list.append(cause_label)
