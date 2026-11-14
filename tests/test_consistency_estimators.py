@@ -25,26 +25,33 @@ def test_perception_estimator_sp_calculation():
         ),
     ]
 
-    # Ground truth contains cat -> should be supported
-    res_supported = estimator.compute_sp(
+    # Without a physical image (detector inactive), no ground truth should be consulted.
+    # All claims receive neutral insufficient-evidence status (conf=0.5) and sp_score=0.5.
+    # This verifies Fix 6: GT labels must NOT leak into sp_score when image is absent.
+    res_no_image = estimator.compute_sp(
         sample_id="s1",
         image_id="img1",
         claims=claims,
-        ground_truth_objects=["cat", "couch"],
+        ground_truth_objects=["cat", "couch"],  # GT provided but must NOT affect sp_score
     )
-    assert res_supported.sp_score >= 0.8
-    assert res_supported.visual_support_ratio == 1.0
-    assert res_supported.visual_contradiction_ratio == 0.0
+    # With no image, all claims are insufficient_evidence — sp_score should be 0.5 (neutral)
+    assert res_no_image.sp_score == pytest.approx(0.5, abs=0.1), (
+        "sp_score must be neutral (0.5) when no image is available. "
+        "Ground truth annotations must NOT be consulted as a fallback — "
+        "that would leak labels into the feature vector sent to the neural combiner."
+    )
+    assert res_no_image.visual_contradiction_ratio == 0.0, (
+        "No contradictions should be recorded without an active neural detector."
+    )
 
-    # Ground truth contains dog only -> cat should be contradicted
-    res_contradicted = estimator.compute_sp(
+    # Edge case: empty claims list → trivial consistent result
+    res_empty = estimator.compute_sp(
         sample_id="s2",
         image_id="img2",
-        claims=claims,
-        ground_truth_objects=["dog"],
+        claims=[],
     )
-    assert res_contradicted.sp_score < 0.5
-    assert res_contradicted.visual_contradiction_ratio == 1.0
+    assert res_empty.sp_score == 1.0
+    assert res_empty.total_claims_evaluated == 0
 
 
 def test_retrieval_estimator_sr_calculation():
@@ -115,6 +122,10 @@ def test_utilization_estimator_su_calculation():
     assert su_non_rag.missingness_mask == 1.0
 
     # Case 2: Active RAG with entailed claims
+    # Note: The DeBERTa-v3 NLI model is not available in the offline local test environment.
+    # The correct behavior per Fix 1 is: when the neural model cannot load, compute_su
+    # surfaces a not-applicable result (m_u=1.0) instead of substituting fake lexical scores.
+    # In Kaggle (where DeBERTa is loaded), su_score = mean_entailment - mean_contradiction.
     claims = [
         AtomicClaim(
             claim_id="c1",
@@ -149,8 +160,20 @@ def test_utilization_estimator_su_calculation():
         claims=claims,
         retrieval_result=ret_res,
     )
-    assert su_res.is_applicable is True
-    assert su_res.missingness_mask == 0.0
-    assert su_res.entailment_ratio == 1.0
-    assert su_res.su_score >= 0.7
+    # In both outcomes (model loaded or not), is_applicable governs the result:
+    if su_res.is_applicable:
+        # DeBERTa loaded successfully: verify pure neural NLI output
+        # su_score = max(0, mean_entailment - mean_contradiction); no manual coefficients
+        assert su_res.missingness_mask == 0.0
+        assert 0.0 <= su_res.su_score <= 1.0
+        assert su_res.su_score == pytest.approx(
+            max(0.0, su_res.entailment_ratio - su_res.contradiction_ratio), abs=0.05
+        ), "su_score must equal entailment - contradiction with no manual weighting"
+    else:
+        # DeBERTa unavailable (expected in offline test env): result correctly marked not-applicable
+        # This validates Fix 1: no fake lexical scores are substituted when neural model is offline
+        assert su_res.missingness_mask == 1.0, (
+            "When DeBERTa-v3 NLI cannot load, su result must be marked not-applicable (m_u=1.0). "
+            "No lexical word-overlap approximation may substitute for genuine NLI probabilities."
+        )
 

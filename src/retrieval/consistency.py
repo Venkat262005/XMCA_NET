@@ -5,6 +5,9 @@ Enforces non-negotiable research rules:
 - Non-RAG datasets (POPE, FaithScore) are strictly flagged NOT_APPLICABLE with missingness_mask = 1.0.
 - Zero synthetic passages or dummy retrieval scores.
 - Genuine ranking diagnostics: top relevance, mean relevance, score margin, query coverage.
+- sr_score is the direct neural cross-encoder top-1 relevance score. No manually weighted
+  combination of signals is applied here. The neural combiner's retrieval branch (Linear(6, 64))
+  receives all 6 retrieval features individually and learns optimal weighting via backprop.
 - Failure categorization: sufficiently_retrieved, weakly_retrieved, missing_evidence, retrieval_unavailable.
 """
 
@@ -89,7 +92,7 @@ class RetrievalConsistencyEstimator:
         rel_thresh = 0.45 if is_normalized else self.relevance_threshold
         margin_thresh = 0.03 if is_normalized else self.margin_threshold
 
-        # Categorize retrieval quality
+        # Categorize retrieval quality (diagnostic metadata only — does not drive sr_score)
         if top_score >= rel_thresh and score_margin >= margin_thresh:
             category = "sufficiently_retrieved"
         elif top_score >= (rel_thresh * 0.7):
@@ -97,14 +100,15 @@ class RetrievalConsistencyEstimator:
         else:
             category = "missing_evidence"
 
+        # sr_score is the neural cross-encoder top-1 relevance score, normalized to [0, 1].
+        # We use the top-ranked passage score as the primary signal because it is the
+        # most direct output of the neural reranker with no manual coefficient mixing.
+        # The combiner's retrieval branch (nn.Linear(6, 64)) receives all 6 retrieval
+        # features individually and learns their optimal combination via backpropagation.
         if is_normalized:
-            normalized_relevance = min(1.0, max(0.0, top_score))
-            normalized_margin = min(1.0, max(0.0, score_margin / 0.25))
+            sr_score = float(min(1.0, max(0.0, top_score)))
         else:
-            normalized_relevance = min(1.0, max(0.0, top_score / max(1.0, self.relevance_threshold * 2.0)))
-            normalized_margin = min(1.0, max(0.0, score_margin / max(1.0, self.margin_threshold * 2.0)))
-
-        sr_score = 0.5 * normalized_relevance + 0.3 * normalized_margin + 0.2 * coverage
+            sr_score = float(min(1.0, max(0.0, top_score / max(1.0, self.relevance_threshold * 2.0))))
 
         doc_ids = [p.doc_id for p in passages]
 

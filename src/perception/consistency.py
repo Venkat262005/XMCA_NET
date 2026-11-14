@@ -254,37 +254,15 @@ class PerceptionConsistencyEstimator:
                             is_supported = False
                             is_contradicted = False
                             conf = 0.50
-            # 2. Offline Ground Truth Fallback (strictly used when detector inactive or image unavailable)
-            elif in_neg:
-                # Authentic ground truth explicitly confirms object is absent
-                if is_absence:
-                    is_supported = True
-                    is_contradicted = False
-                    conf = 0.95
-                else:
-                    is_supported = False
-                    is_contradicted = True
-                    conf = 0.05
-            elif gt_set:
-                # Ground truth object list provided for image
-                if is_absence:
-                    is_supported = not in_gt
-                    is_contradicted = in_gt
-                    conf = 0.95 if not in_gt else 0.05
-                else:
-                    is_supported = in_gt
-                    is_contradicted = not in_gt
-                    conf = 0.95 if in_gt else 0.05
+            # 2. No detector active and no image available: return neutral insufficient-evidence.
+            # We deliberately do NOT consult ground truth annotations here because doing so
+            # would leak the gold label into sp_score, corrupting the feature vector sent to
+            # the neural combiner. When we cannot ground visually, we surface uncertainty (0.5)
+            # and let the combiner's missingness-gating handle the absent visual signal.
             else:
-                # No detector and no ground truth available
-                if is_absence:
-                    is_supported = True
-                    is_contradicted = False
-                    conf = 0.85
-                else:
-                    is_supported = False
-                    is_contradicted = False
-                    conf = 0.50
+                is_supported = False
+                is_contradicted = False
+                conf = 0.5  # Neutral — visual evidence genuinely absent; do not fabricate
 
             if is_supported:
                 supported += 1

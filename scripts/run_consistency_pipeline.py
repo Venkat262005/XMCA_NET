@@ -316,34 +316,45 @@ def main():
             retrieval_result=r_result,
         )
 
-        # Objective ground-truth root-cause supervision for training the neural attribution head
+        # Objective ground-truth root-cause supervision for training the neural attribution head.
+        # Cause is determined strictly from the actual diagnostic measurements — not from the
+        # dataset name or any hardcoded dataset-to-cause mapping.
         if gt_label == 1:
-            if dataset_id in ("pope", "faithscore"):
-                # POPE and FaithScore explicitly evaluate visual object perception and descriptive grounding
-                cause_label = 0  # Perception failure
-            else:
-                # Knowledge-seeking RAG datasets (InfoSeek, A-OKVQA):
-                # An open-domain knowledge question primarily tests external knowledge retrieval and utilization.
-                # Determine cause based on whether the retriever found the ground-truth answer in the 128k corpus:
-                accepted = gt_entry.get("accepted_answers", [])
-                gold_in_retrieval = False
-                if r_result and r_result.retrieved_passages and accepted:
-                    for passage in r_result.retrieved_passages:
-                        p_clean = passage.passage_text.lower()
-                        if any(ans in p_clean for ans in accepted if len(ans) >= 2):
-                            gold_in_retrieval = True
-                            break
+            # Determine the active RAG regime from missingness masks produced by the estimators
+            rag_absent = (r_res.missingness_mask == 1.0 and u_res.missingness_mask == 1.0)
 
-                # 1. Blatant visual perception contradiction (model contradicted the image itself):
-                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.50:
-                    cause_label = 0  # Visual perception failure
-                # 2. Evidence utilization failure (retriever successfully retrieved passages containing the gold answer,
-                # yet the model failed to utilize that evidence and generated a hallucinated response):
-                elif gold_in_retrieval:
-                    cause_label = 2  # Evidence utilization failure
-                # 3. Knowledge retrieval failure (retriever failed to find any passage containing the gold answer in the corpus):
+            if rag_absent:
+                # Both retrieval and utilization axes are marked NOT_APPLICABLE for this sample
+                # (i.e. POPE / FaithScore). The only possible active failure axis is visual
+                # perception. This assignment is correct because there is no retrieval or
+                # utilization signal to compare against.
+                cause_label = 0  # Visual perception is the only active axis
+            else:
+                # RAG datasets (InfoSeek, A-OKVQA): all three axes are potentially active.
+                # Determine cause from the actual diagnostic measurements, in priority order:
+
+                # Priority 1: OWL-ViT directly contradicted the visual claim
+                # (high visual_contradiction_ratio = grounding-confirmed visual error)
+                if p_res.total_claims_evaluated > 0 and p_res.visual_contradiction_ratio >= 0.40:
+                    cause_label = 0  # Visual perception failure confirmed by OWL-ViT grounding
+
+                # Priority 2: Retriever found the gold answer in the retrieved corpus but the
+                # model generated a hallucinated response — evidence exists, model ignored it
                 else:
-                    cause_label = 1  # Knowledge retrieval failure
+                    accepted = gt_entry.get("accepted_answers", [])
+                    gold_in_retrieval = False
+                    if r_result and r_result.retrieved_passages and accepted:
+                        for passage in r_result.retrieved_passages:
+                            p_clean = passage.passage_text.lower()
+                            if any(ans in p_clean for ans in accepted if len(ans) >= 2):
+                                gold_in_retrieval = True
+                                break
+
+                    if gold_in_retrieval:
+                        cause_label = 2  # Evidence utilization failure
+                    else:
+                        # Priority 3: Retriever failed to find the gold answer in the corpus
+                        cause_label = 1  # Knowledge retrieval failure
         else:
             cause_label = None  # Faithful / correct sample
 

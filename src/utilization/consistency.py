@@ -76,11 +76,15 @@ class NeuralNLIModel:
             self.model.eval()
 
     def predict_nli(self, premise_hypothesis_pairs: List[Tuple[str, str]]) -> np.ndarray:
-        """Compute Softmax probabilities for (premise, hypothesis) pairs.
+        """Compute Softmax probabilities for (premise, hypothesis) pairs via neural NLI.
 
         Returns:
             numpy array of shape (N, 3) where columns correspond to:
             [contradiction, entailment, neutral] (or model id2label mapping).
+
+        Raises RuntimeError if the neural model cannot be loaded. Callers must catch
+        this and return a not-applicable utilization result (m_u=1.0) rather than
+        substituting any lexical similarity approximation.
         """
         if not premise_hypothesis_pairs:
             return np.empty((0, 3))
@@ -119,20 +123,11 @@ class NeuralNLIModel:
 
             aligned_probs = np.stack([probs[:, c_idx], probs[:, e_idx], probs[:, n_idx]], axis=1)
             return aligned_probs
-
-        except Exception:
-            # Lexical overlap fallback for dry-run/offline testing
-            results = []
-            for premise, hypothesis in premise_hypothesis_pairs:
-                p_tokens = set(premise.lower().split())
-                h_tokens = set(hypothesis.lower().split())
-                overlap = len(h_tokens & p_tokens) / max(1, len(h_tokens))
-                # [contradiction, entailment, neutral]
-                if overlap > 0.4:
-                    results.append([0.05, float(overlap), 1.0 - float(overlap)])
-                else:
-                    results.append([0.2, 0.1, 0.7])
-            return np.array(results)
+        except Exception as exc:
+            # Wrap all failures (network errors, model load errors, etc.) as RuntimeError
+            # so callers can catch one exception type and return m_u=1.0 (not-applicable).
+            # NO lexical approximation is ever substituted here.
+            raise RuntimeError(f"NLI neural model unavailable: {exc}") from exc
 
 
 class UtilizationConsistencyEstimator:
@@ -200,8 +195,27 @@ class UtilizationConsistencyEstimator:
             for p in top_passages:
                 pairs.append((p.passage_text, c.claim_text))
 
-        # Run NLI forward passes
-        probs = self.nli_model.predict_nli(pairs)
+        # Run NLI forward passes — if neural model unavailable, return not-applicable
+        # rather than substituting any lexical approximation.
+        try:
+            probs = self.nli_model.predict_nli(pairs)
+        except RuntimeError:
+            return UtilizationDiagnosticResult(
+                dataset_id=dataset_id_clean,
+                sample_id=sample_id,
+                is_applicable=False,
+                su_score=0.0,
+                entailment_ratio=0.0,
+                contradiction_ratio=0.0,
+                omission_ratio=0.0,
+                unsupported_claim_ratio=0.0,
+                missingness_mask=1.0,
+                total_claims_evaluated=0,
+                entailed_claims=0,
+                contradicted_claims=0,
+                unsupported_claims=0,
+                metadata={"reason": "nli_model_unavailable"},
+            )
 
         num_passages = len(top_passages)
         claim_entailments: List[float] = []
@@ -248,10 +262,15 @@ class UtilizationConsistencyEstimator:
 
         omission_ratio = (omitted_entities / max(1, total_entities)) if total_entities > 0 else 0.0
 
-        # Continuous S_U score: weighted mean entailment minus contradiction and omission penalties
+        # su_score is the mean DeBERTa-v3 entailment probability minus the mean contradiction
+        # probability — a direct neural NLI signal with no manually tuned coefficients.
+        # The neural combiner's utilization branch receives all 6 utilization features
+        # (su_score, entailment_ratio, contradiction_ratio, omission_ratio,
+        #  unsupported_claim_ratio, m_u) individually and learns their optimal
+        # combination through its nn.Linear(6, 64) layer via backpropagation.
         mean_entailment = float(np.mean(claim_entailments)) if claim_entailments else 0.0
         mean_contradiction = float(np.mean(claim_contradictions)) if claim_contradictions else 0.0
-        su_score = max(0.0, min(1.0, mean_entailment * 0.7 - mean_contradiction * 0.2 - omission_ratio * 0.1 + 0.3 * (1.0 - omission_ratio)))
+        su_score = max(0.0, min(1.0, mean_entailment - mean_contradiction))
 
         return UtilizationDiagnosticResult(
             dataset_id=dataset_id_clean,

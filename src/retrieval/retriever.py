@@ -83,7 +83,12 @@ class NeuralCrossEncoderReranker:
             self.model.eval()
 
     def score_pairs(self, query: str, passages: List[str]) -> List[float]:
-        """Compute neural cross-attention scores for (query, passage) pairs."""
+        """Compute neural cross-attention scores for (query, passage) pairs.
+
+        Returns empty list if the neural model cannot be loaded. Callers must
+        treat an empty return as a retrieval-unavailable signal (m_r = 1.0) and
+        must NOT substitute lexical similarity as a replacement score.
+        """
         if not passages:
             return []
 
@@ -106,14 +111,9 @@ class NeuralCrossEncoderReranker:
                     scores = [scores]
                 return [float(s) for s in scores]
         except Exception:
-            # Fallback to lexical normalized scoring if weights cannot be fetched offline
-            query_tokens = set(query.lower().split())
-            scores = []
-            for p in passages:
-                p_tokens = set(p.lower().split())
-                jaccard = len(query_tokens & p_tokens) / max(1, len(query_tokens | p_tokens))
-                scores.append(float(jaccard))
-            return scores
+            # Neural model unavailable: return empty list so the retriever can
+            # surface a zero-evidence result instead of injecting fake scores.
+            return []
 
 
 class UnifiedRetriever:
@@ -142,9 +142,13 @@ class UnifiedRetriever:
         query: str,
         top_k: int = 5,
         allowed_eligibility: Optional[Set[str]] = None,
-        use_reranker: bool = True,
     ) -> RetrievalResult:
-        """Execute retrieval with strict applicability checks and neural reranking."""
+        """Execute retrieval with strict applicability checks and neural reranking.
+
+        The neural cross-encoder reranker is always used. When the reranker model
+        cannot be loaded, an empty-passage result is returned so callers can set
+        m_r accordingly rather than receiving lexically-fabricated scores.
+        """
         # Rule: POPE and FaithScore are strictly non-RAG
         if dataset_id.lower() in NON_RAG_DATASETS:
             return RetrievalResult(
@@ -197,13 +201,27 @@ class UnifiedRetriever:
         candidate_docs = [doc for doc, _ in candidate_hits]
         bm25_scores = [score for _, score in candidate_hits]
 
-        # Step 2: Neural Cross-Encoder Reranking
-        if use_reranker:
-            passage_texts = [d.passage_text for d in candidate_docs]
-            neural_scores = self.reranker.score_pairs(query, passage_texts)
-        else:
-            max_b = max(1e-5, max(bm25_scores))
-            neural_scores = [min(1.0, s / max_b) for s in bm25_scores]
+        # Step 2: Neural Cross-Encoder Reranking — always required; no BM25 proxy substitution.
+        # If the neural reranker cannot score (model unavailable), return a zero-evidence result
+        # so the pipeline can set m_r=1.0 (retrieval-unavailable) rather than injecting fake scores.
+        passage_texts = [d.passage_text for d in candidate_docs]
+        neural_scores = self.reranker.score_pairs(query, passage_texts)
+
+        if not neural_scores:
+            # Neural reranker unavailable: surface zero-evidence retrieval (no passages scored)
+            return RetrievalResult(
+                dataset_id=dataset_id,
+                sample_id=sample_id,
+                is_applicable=True,
+                query=query,
+                retrieved_passages=[],
+                top_score=0.0,
+                mean_score=0.0,
+                score_margin=0.0,
+                evidence_coverage=0.0,
+                ranking_entropy=0.0,
+                missingness_mask=0.0,
+            )
 
         # Sort candidates descending by neural score
         ranked_indices = sorted(range(len(neural_scores)), key=lambda i: neural_scores[i], reverse=True)[:top_k]
