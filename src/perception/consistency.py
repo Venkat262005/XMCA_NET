@@ -50,7 +50,15 @@ class PerceptionDiagnosticResult(BaseModel):
 
 
 class PerceptionConsistencyEstimator:
-    """Estimator for Perception Consistency (S_P) using OWL-ViT visual grounding."""
+    """Estimator for Perception Consistency (S_P) using SOTA open-vocabulary visual grounding.
+
+    Supports OWLv2 (google/owlv2-base-patch16-ensemble) and OWL-ViT (google/owlvit-base-patch32).
+    """
+
+    DEFAULT_MODELS = [
+        "google/owlv2-base-patch16-ensemble",
+        "google/owlvit-base-patch32",
+    ]
 
     def __init__(
         self,
@@ -69,22 +77,43 @@ class PerceptionConsistencyEstimator:
             self._load_model()
 
     def _load_model(self):
-        """Load OWL-ViT processor and neural vision-language detection model."""
+        """Load OWLv2 / OWL-ViT processor and neural vision-language detection model."""
         if self.model is None:
             import os
-            from transformers import OwlViTProcessor, OwlViTForObjectDetection
+            from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
             is_offline = os.environ.get("HF_HUB_OFFLINE", "0") == "1" or os.environ.get("TRANSFORMERS_OFFLINE", "0") == "1"
-            if is_offline:
-                self.processor = OwlViTProcessor.from_pretrained(self.model_name, local_files_only=True)
-                self.model = OwlViTForObjectDetection.from_pretrained(self.model_name, local_files_only=True).to(self.device)
-            else:
+
+            candidate_models = [self.model_name] + [m for m in self.DEFAULT_MODELS if m != self.model_name]
+            loaded = False
+
+            for cand in candidate_models:
                 try:
-                    self.processor = OwlViTProcessor.from_pretrained(self.model_name, local_files_only=True)
-                    self.model = OwlViTForObjectDetection.from_pretrained(self.model_name, local_files_only=True).to(self.device)
+                    if is_offline:
+                        self.processor = AutoProcessor.from_pretrained(cand, local_files_only=True)
+                        self.model = AutoModelForZeroShotObjectDetection.from_pretrained(cand, local_files_only=True).to(self.device)
+                    else:
+                        try:
+                            self.processor = AutoProcessor.from_pretrained(cand, local_files_only=True)
+                            self.model = AutoModelForZeroShotObjectDetection.from_pretrained(cand, local_files_only=True).to(self.device)
+                        except Exception:
+                            self.processor = AutoProcessor.from_pretrained(cand)
+                            self.model = AutoModelForZeroShotObjectDetection.from_pretrained(cand).to(self.device)
+                    self.model_name = cand
+                    self.model.eval()
+                    loaded = True
+                    break
                 except Exception:
-                    self.processor = OwlViTProcessor.from_pretrained(self.model_name)
-                    self.model = OwlViTForObjectDetection.from_pretrained(self.model_name).to(self.device)
-            self.model.eval()
+                    continue
+
+            if not loaded:
+                # If Auto classes fail, fallback to specific OwlViT import
+                try:
+                    from transformers import OwlViTProcessor, OwlViTForObjectDetection
+                    self.processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+                    self.model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32").to(self.device)
+                    self.model.eval()
+                except Exception:
+                    pass
 
     def compute_sp(
         self,

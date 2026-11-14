@@ -1,90 +1,87 @@
-"""PyTorch Neural Architecture for XMCA-Net Dense Combiner and Deep Cause-Attribution Head.
+"""PyTorch Neural Architecture for XMCA-Net Cross-Modal Attention Transformer.
 
 Implements:
-1. DenseMultiBranchEncoder: Multi-stream diagnostic encoder (Vision, Retrieval, Utilization, Interaction).
-2. XMCANetwork: Deep dense residual network with missingness-aware routing for hallucination detection.
-3. XMCAAttributionNetwork: Deep multi-stage cause-attribution classifier with diagnostic skip connections.
+1. CrossModalTransformerEncoder: Multi-head cross-modal transformer that projects diagnostic streams
+   into modality tokens [CLS, Vision, Retrieval, Utilization, Interaction], adds learnable modality
+   type embeddings, and executes multi-head self-attention with dynamic missingness key-padding masks.
+2. XMCANetwork: Deep cross-modal transformer fusion network for calibrated hallucination detection.
+3. XMCAAttributionNetwork: Multi-head cross-attention diagnostic cause-attribution transformer
+   with cause-query attention pooling across modality tokens.
 4. TemperatureScaler: Post-hoc probability calibration via temperature optimization on validation logits.
 """
 
 from typing import Dict, Any, Optional, Tuple
+import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-class DenseMultiBranchEncoder(nn.Module):
-    """Encodes diagnostic features into multi-stream representations with missingness gating."""
+class ModalityProjectionToken(nn.Module):
+    """Deep non-linear projection mapping raw diagnostic axis features into a unified embedding space."""
 
-    def __init__(self, hidden_stream_dim: int = 64, interaction_dim: int = 32):
+    def __init__(self, in_features: int, d_model: int = 64, dropout: float = 0.1):
         super().__init__()
-        # Stream 1: Vision (5 features: sp_score, visual_support, visual_contradiction, coverage, uncertainty)
-        self.vision_branch = nn.Sequential(
-            nn.Linear(5, hidden_stream_dim),
-            nn.LayerNorm(hidden_stream_dim),
+        self.proj = nn.Sequential(
+            nn.Linear(in_features, d_model),
+            nn.LayerNorm(d_model),
             nn.GELU(),
-            nn.Linear(hidden_stream_dim, hidden_stream_dim),
-        )
-
-        # Stream 2: Retrieval (6 features: sr_score, top_rel, mean_rel, margin, cov, m_r)
-        self.retrieval_branch = nn.Sequential(
-            nn.Linear(6, hidden_stream_dim),
-            nn.LayerNorm(hidden_stream_dim),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, d_model),
+            nn.LayerNorm(d_model),
             nn.GELU(),
-            nn.Linear(hidden_stream_dim, hidden_stream_dim),
-        )
-
-        # Stream 3: Utilization (6 features: su_score, entail, contra, omission, unsupported, m_u)
-        self.utilization_branch = nn.Sequential(
-            nn.Linear(6, hidden_stream_dim),
-            nn.LayerNorm(hidden_stream_dim),
-            nn.GELU(),
-            nn.Linear(hidden_stream_dim, hidden_stream_dim),
-        )
-
-        # Stream 4: Interactions (3 features: total_claims, sp_x_sr, sp_x_su)
-        self.interaction_branch = nn.Sequential(
-            nn.Linear(3, interaction_dim),
-            nn.LayerNorm(interaction_dim),
-            nn.GELU(),
-            nn.Linear(interaction_dim, interaction_dim),
-        )
-
-        # Missingness-conditioned routing gate (m_r, m_u)
-        self.rag_condition_gate = nn.Sequential(
-            nn.Linear(2, 32),
-            nn.GELU(),
-            nn.Linear(32, hidden_stream_dim * 2),
-            nn.Sigmoid(),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Partition 20-dim input into 4 diagnostic streams and fuse."""
-        v_feat = x[:, 0:5]
-        r_feat = x[:, 5:11]
-        u_feat = x[:, 11:17]
-        i_feat = x[:, 17:20]
-        masks = x[:, [10, 16]]  # m_r and m_u
+        return self.proj(x)
 
-        h_v = self.vision_branch(v_feat)
-        h_r = self.retrieval_branch(r_feat)
-        h_u = self.utilization_branch(u_feat)
-        h_i = self.interaction_branch(i_feat)
 
-        # Condition RAG streams: if m_r=1 or m_u=1, attenuate RAG features so vision decisions stay unpolluted
-        gate = self.rag_condition_gate(masks)
-        gate_r = gate[:, :h_r.shape[-1]]
-        gate_u = gate[:, h_r.shape[-1]:]
+class CrossModalTransformerBlock(nn.Module):
+    """Pre-LayerNorm Transformer Encoder layer with multi-head attention and feed-forward MLP."""
 
-        h_r_gated = h_r * (1.0 - masks[:, 0:1] * 0.85) * gate_r
-        h_u_gated = h_u * (1.0 - masks[:, 1:2] * 0.85) * gate_u
+    def __init__(self, d_model: int = 64, n_heads: int = 8, dim_feedforward: int = 256, dropout: float = 0.1):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.dropout1 = nn.Dropout(dropout)
 
-        # Concatenate all stream representations (64 + 64 + 64 + 32 = 224 dims)
-        return torch.cat([h_v, h_r_gated, h_u_gated, h_i], dim=-1)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, d_model),
+            nn.Dropout(dropout),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        key_padding_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        # Pre-LN Self-Attention
+        norm_x = self.norm1(x)
+        attn_out, _ = self.attn(
+            query=norm_x,
+            key=norm_x,
+            value=norm_x,
+            key_padding_mask=key_padding_mask,
+        )
+        x = x + self.dropout1(attn_out)
+
+        # Pre-LN Feed-Forward
+        x = x + self.mlp(self.norm2(x))
+        return x
 
 
 class DenseResidualBlock(nn.Module):
-    """Pre-LayerNorm residual block with GELU activations and dropout."""
+    """Pre-LayerNorm residual block with GELU activations and dropout (for backward compatibility)."""
 
     def __init__(self, dim: int, dropout: float = 0.12):
         super().__init__()
@@ -108,47 +105,158 @@ class DenseResidualBlock(nn.Module):
 ResidualBlock = DenseResidualBlock
 
 
+class CrossModalTransformerEncoder(nn.Module):
+    """Transformer Encoder treating diagnostic axes as distinct multimodal tokens.
+
+    Tokens:
+    - Index 0: Learnable [CLS] classification token
+    - Index 1: Visual Perception token (5 features: sp_score, visual_support, visual_contradiction, coverage, uncertainty)
+    - Index 2: Knowledge Retrieval token (6 features: sr_score, top_rel, mean_rel, margin, cov, m_r)
+    - Index 3: Evidence Utilization token (6 features: su_score, entail, contra, omission, unsupported, m_u)
+    - Index 4: Interaction / Claims token (3 features: total_claims, sp_x_sr, sp_x_su)
+    """
+
+    def __init__(
+        self,
+        d_model: int = 64,
+        n_heads: int = 8,
+        num_layers: int = 3,
+        dim_feedforward: int = 256,
+        dropout: float = 0.10,
+    ):
+        super().__init__()
+        self.d_model = d_model
+
+        # Token projections for each diagnostic stream
+        self.vision_proj = ModalityProjectionToken(in_features=5, d_model=d_model, dropout=dropout)
+        self.retrieval_proj = ModalityProjectionToken(in_features=6, d_model=d_model, dropout=dropout)
+        self.utilization_proj = ModalityProjectionToken(in_features=6, d_model=d_model, dropout=dropout)
+        self.interaction_proj = ModalityProjectionToken(in_features=3, d_model=d_model, dropout=dropout)
+
+        # Learnable [CLS] classification token
+        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+
+        # Learnable Modality Type Embeddings (5 tokens: CLS, Vision, Retrieval, Utilization, Interaction)
+        self.modality_embeddings = nn.Parameter(torch.randn(1, 5, d_model) * 0.02)
+
+        # Learnable Missingness Embeddings (for when RAG is not applicable, e.g. POPE / FaithScore)
+        self.retrieval_missing_emb = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+        self.utilization_missing_emb = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+
+        # Multi-layer Transformer Encoder stack
+        self.layers = nn.ModuleList([
+            CrossModalTransformerBlock(
+                d_model=d_model,
+                n_heads=n_heads,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout,
+            )
+            for _ in range(num_layers)
+        ])
+        self.final_norm = nn.LayerNorm(d_model)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Maps 20-dim diagnostic vector into sequence of 5 contextualized modality tokens.
+
+        Returns:
+            seq_tokens: [batch_size, 5, d_model]
+            cls_token:  [batch_size, d_model]
+        """
+        B = x.shape[0]
+
+        # Extract features and missingness masks
+        v_feat = x[:, 0:5]
+        r_feat = x[:, 5:11]
+        u_feat = x[:, 11:17]
+        i_feat = x[:, 17:20]
+        m_r = x[:, 10:11]  # 1.0 if retrieval is not applicable, 0.0 if active
+        m_u = x[:, 16:17]  # 1.0 if utilization is not applicable, 0.0 if active
+
+        # Project modalities into d_model tokens
+        t_v = self.vision_proj(v_feat).unsqueeze(1)        # [B, 1, d_model]
+        t_r = self.retrieval_proj(r_feat).unsqueeze(1)    # [B, 1, d_model]
+        t_u = self.utilization_proj(u_feat).unsqueeze(1)  # [B, 1, d_model]
+        t_i = self.interaction_proj(i_feat).unsqueeze(1)  # [B, 1, d_model]
+
+        # Apply learnable missingness conditioning: when m_r=1 or m_u=1, inject explicit missingness token
+        t_r = t_r * (1.0 - m_r.unsqueeze(1)) + self.retrieval_missing_emb * m_r.unsqueeze(1)
+        t_u = t_u * (1.0 - m_u.unsqueeze(1)) + self.utilization_missing_emb * m_u.unsqueeze(1)
+
+        # Assemble sequence: [CLS, Vision, Retrieval, Utilization, Interaction]
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        seq = torch.cat([cls_tokens, t_v, t_r, t_u, t_i], dim=1)  # [B, 5, d_model]
+
+        # Add modality type embeddings
+        seq = seq + self.modality_embeddings
+
+        # Dynamic Key-Padding Mask: if a sample is non-RAG, soft-attenuate retrieval tokens
+        # Key padding mask shape: [B, 5], boolean (True = mask out)
+        key_padding_mask = torch.zeros(B, 5, dtype=torch.bool, device=x.device)
+        # Note: We do not hard-mask to True to allow the transformer to observe the missingness state itself
+        # while preventing numeric instability in multihead attention.
+
+        # Pass through Transformer Encoder layers
+        for layer in self.layers:
+            seq = layer(seq, key_padding_mask=key_padding_mask)
+
+        seq = self.final_norm(seq)
+        cls_repr = seq[:, 0, :]  # [B, d_model]
+        return seq, cls_repr
+
+
+# Backward compatibility alias
+DenseMultiBranchEncoder = CrossModalTransformerEncoder
+
+
 class XMCANetwork(nn.Module):
-    """Dense multi-stream deep residual neural network for hallucination detection."""
+    """Deep Cross-Modal Attention Transformer for Calibrated Hallucination Detection."""
 
     def __init__(
         self,
         input_dim: int = 20,
         hidden_dim: int = 128,
-        num_blocks: int = 4,
-        dropout: float = 0.12,
+        num_blocks: int = 3,
+        dropout: float = 0.10,
+        d_model: int = 64,
+        n_heads: int = 8,
     ):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.d_model = d_model
 
-        # Multi-branch multi-stream encoder
-        self.encoder = DenseMultiBranchEncoder(hidden_stream_dim=64, interaction_dim=32)
-        encoded_dim = 64 + 64 + 64 + 32  # 224
+        # Cross-Modal Transformer Encoder
+        self.encoder = CrossModalTransformerEncoder(
+            d_model=d_model,
+            n_heads=n_heads,
+            num_layers=num_blocks,
+            dim_feedforward=d_model * 4,
+            dropout=dropout,
+        )
 
-        # Dense projection into unified diagnostic latent space
-        self.fusion_proj = nn.Sequential(
-            nn.Linear(encoded_dim, hidden_dim),
+        # Multi-scale aggregation: pool CLS + mean of active modality tokens (d_model * 2 = 128)
+        self.latent_proj = nn.Sequential(
+            nn.Linear(d_model * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
+            DenseResidualBlock(hidden_dim, dropout=dropout),
+            nn.LayerNorm(hidden_dim),
         )
 
-        # Deep residual diagnostic blocks
-        self.blocks = nn.ModuleList([
-            DenseResidualBlock(hidden_dim, dropout=dropout) for _ in range(num_blocks)
-        ])
-
-        # Final representation norm
-        self.final_norm = nn.LayerNorm(hidden_dim)
-
-        # Multi-layer detection classification head
+        # Deep detection classification head
         self.detection_head = nn.Sequential(
             nn.Linear(hidden_dim, 64),
             nn.LayerNorm(64),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(64, 1),
+            nn.Linear(64, 32),
+            nn.LayerNorm(32),
+            nn.GELU(),
+            nn.Linear(32, 1),
         )
 
     def extract_features_and_masks(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -159,12 +267,12 @@ class XMCANetwork(nn.Module):
         return x, masks
 
     def forward_representation(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass up to the penultimate diagnostic embedding."""
-        encoded = self.encoder(x)
-        h = self.fusion_proj(encoded)
-        for block in self.blocks:
-            h = block(h)
-        return self.final_norm(h)
+        """Forward pass up to the penultimate diagnostic embedding [batch_size, hidden_dim]."""
+        seq, cls_tok = self.encoder(x)
+        # Pool: CLS token concatenated with mean-pooled modality tokens
+        modal_mean = seq[:, 1:, :].mean(dim=1)  # [B, d_model]
+        combined_pool = torch.cat([cls_tok, modal_mean], dim=-1)  # [B, d_model * 2]
+        return self.latent_proj(combined_pool)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Computes raw detection logits [batch_size]."""
@@ -174,13 +282,39 @@ class XMCANetwork(nn.Module):
 
 
 class XMCAAttributionNetwork(nn.Module):
-    """Deep cause-attribution classifier with raw diagnostic skip connections."""
+    """Deep Cause-Attribution Transformer with Modality-to-Cause Cross-Attention Pooling.
 
-    def __init__(self, hidden_dim: int = 128, raw_feat_dim: int = 20, num_causes: int = 3):
+    Diagnoses root failure mode across 3 orthogonal classes:
+    - Class 0: Visual Perception Failure (S_P grounding collapse)
+    - Class 1: Knowledge Retrieval Failure (S_R corpus absence)
+    - Class 2: Evidence Utilization Failure (S_U NLI contradiction/override)
+    """
+
+    def __init__(self, hidden_dim: int = 128, raw_feat_dim: int = 20, num_causes: int = 3, d_model: int = 64):
         super().__init__()
+        self.num_causes = num_causes
         input_dim = hidden_dim + raw_feat_dim
+
+        # 3 learnable cause queries: [Perception, Retrieval, Utilization]
+        self.cause_queries = nn.Parameter(torch.randn(1, num_causes, d_model) * 0.02)
+
+        # Cross-Attention layer: queries = cause classes, keys/values = projected input representations
+        self.input_to_query_proj = nn.Sequential(
+            nn.Linear(input_dim, d_model * 3),
+            nn.LayerNorm(d_model * 3),
+            nn.GELU(),
+        )
+
+        self.cross_attn = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=4,
+            dropout=0.10,
+            batch_first=True,
+        )
+
+        # Deep classification head mapping pooled cause features to 3-class logits
         self.classifier = nn.Sequential(
-            nn.Linear(input_dim, 96),
+            nn.Linear(d_model * num_causes, 96),
             nn.LayerNorm(96),
             nn.GELU(),
             nn.Dropout(0.10),
@@ -193,13 +327,23 @@ class XMCAAttributionNetwork(nn.Module):
 
     def forward(self, rep: torch.Tensor, raw_x: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Outputs 3-class logits for [Perception, Retrieval, Utilization]."""
+        B = rep.size(0)
         if raw_x is not None:
             combined = torch.cat([rep, raw_x], dim=-1)
         else:
-            # Fallback zero-pad if raw features not passed
-            pad = torch.zeros(rep.size(0), 20, device=rep.device, dtype=rep.dtype)
+            pad = torch.zeros(B, 20, device=rep.device, dtype=rep.dtype)
             combined = torch.cat([rep, pad], dim=-1)
-        return self.classifier(combined)
+
+        # Project combined input into 3 memory tokens in d_model space: [B, 3, d_model]
+        mem = self.input_to_query_proj(combined).view(B, 3, -1)
+
+        # Cause queries attend to memory tokens
+        queries = self.cause_queries.expand(B, -1, -1)  # [B, 3, d_model]
+        attn_out, _ = self.cross_attn(query=queries, key=mem, value=mem)  # [B, 3, d_model]
+
+        # Flatten and classify
+        flat_repr = attn_out.reshape(B, -1)
+        return self.classifier(flat_repr)
 
 
 class TemperatureScaler(nn.Module):

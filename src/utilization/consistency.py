@@ -41,11 +41,16 @@ class UtilizationDiagnosticResult(BaseModel):
 
 
 class NeuralNLIModel:
-    """Neural Cross-Encoder evaluating premise-hypothesis entailment."""
+    """Neural Cross-Encoder evaluating premise-hypothesis entailment via SOTA DeBERTa-v3."""
+
+    DEFAULT_MODELS = [
+        "cross-encoder/nli-deberta-v3-large",
+        "cross-encoder/nli-deberta-v3-base",
+    ]
 
     def __init__(
         self,
-        model_name: str = "cross-encoder/nli-deberta-v3-base",
+        model_name: str = "cross-encoder/nli-deberta-v3-large",
         device: Optional[str] = None,
         lazy_load: bool = True,
     ):
@@ -61,19 +66,32 @@ class NeuralNLIModel:
         if self.model is None:
             import os
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
-            # Check offline mode
             is_offline = os.environ.get("HF_HUB_OFFLINE", "0") == "1" or os.environ.get("TRANSFORMERS_OFFLINE", "0") == "1"
-            if is_offline:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
-                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name, local_files_only=True).to(self.device)
-            else:
+
+            candidate_models = [self.model_name] + [m for m in self.DEFAULT_MODELS if m != self.model_name]
+            loaded = False
+
+            for cand in candidate_models:
                 try:
-                    self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
-                    self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name, local_files_only=True).to(self.device)
+                    if is_offline:
+                        self.tokenizer = AutoTokenizer.from_pretrained(cand, local_files_only=True)
+                        self.model = AutoModelForSequenceClassification.from_pretrained(cand, local_files_only=True).to(self.device)
+                    else:
+                        try:
+                            self.tokenizer = AutoTokenizer.from_pretrained(cand, local_files_only=True)
+                            self.model = AutoModelForSequenceClassification.from_pretrained(cand, local_files_only=True).to(self.device)
+                        except Exception:
+                            self.tokenizer = AutoTokenizer.from_pretrained(cand)
+                            self.model = AutoModelForSequenceClassification.from_pretrained(cand).to(self.device)
+                    self.model_name = cand
+                    self.model.eval()
+                    loaded = True
+                    break
                 except Exception:
-                    self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                    self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name).to(self.device)
-            self.model.eval()
+                    continue
+
+            if not loaded:
+                raise RuntimeError(f"Could not load NLI neural model from candidates: {candidate_models}")
 
     def predict_nli(self, premise_hypothesis_pairs: List[Tuple[str, str]]) -> np.ndarray:
         """Compute Softmax probabilities for (premise, hypothesis) pairs via neural NLI.

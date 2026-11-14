@@ -49,11 +49,20 @@ NON_RAG_DATASETS = {"pope", "faithscore"}
 
 
 class NeuralCrossEncoderReranker:
-    """Neural cross-attention reranker evaluating joint query-document representations."""
+    """Neural cross-attention reranker evaluating joint query-document representations.
+
+    Supports SOTA large-scale cross-encoders (e.g. BAAI/bge-reranker-large, 340M params)
+    with automatic local cache resolution.
+    """
+
+    DEFAULT_MODELS = [
+        "BAAI/bge-reranker-large",
+        "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    ]
 
     def __init__(
         self,
-        model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        model_name: str = "BAAI/bge-reranker-large",
         device: Optional[str] = None,
         lazy_load: bool = True,
     ):
@@ -70,17 +79,32 @@ class NeuralCrossEncoderReranker:
             import os
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
             is_offline = os.environ.get("HF_HUB_OFFLINE", "0") == "1" or os.environ.get("TRANSFORMERS_OFFLINE", "0") == "1"
-            if is_offline:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
-                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name, local_files_only=True).to(self.device)
-            else:
+
+            # Attempt loading primary SOTA model; fallback to secondary if primary unavailable offline
+            candidate_models = [self.model_name] + [m for m in self.DEFAULT_MODELS if m != self.model_name]
+            loaded = False
+
+            for cand in candidate_models:
                 try:
-                    self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
-                    self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name, local_files_only=True).to(self.device)
+                    if is_offline:
+                        self.tokenizer = AutoTokenizer.from_pretrained(cand, local_files_only=True)
+                        self.model = AutoModelForSequenceClassification.from_pretrained(cand, local_files_only=True).to(self.device)
+                    else:
+                        try:
+                            self.tokenizer = AutoTokenizer.from_pretrained(cand, local_files_only=True)
+                            self.model = AutoModelForSequenceClassification.from_pretrained(cand, local_files_only=True).to(self.device)
+                        except Exception:
+                            self.tokenizer = AutoTokenizer.from_pretrained(cand)
+                            self.model = AutoModelForSequenceClassification.from_pretrained(cand).to(self.device)
+                    self.model_name = cand
+                    self.model.eval()
+                    loaded = True
+                    break
                 except Exception:
-                    self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                    self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name).to(self.device)
-            self.model.eval()
+                    continue
+
+            if not loaded:
+                raise RuntimeError(f"Could not load neural cross-encoder reranker from candidates: {candidate_models}")
 
     def score_pairs(self, query: str, passages: List[str]) -> List[float]:
         """Compute neural cross-attention scores for (query, passage) pairs.
