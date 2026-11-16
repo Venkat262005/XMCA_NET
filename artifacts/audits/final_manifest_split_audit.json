@@ -1,0 +1,41 @@
+{
+  "audit_timestamp": "2026-11-16T13:46:55Z",
+  "audit_status": "PASSED_ZERO_LEAKAGE",
+  "random_seed": 42,
+  "total_cohort_samples": 3174,
+  "total_image_groups": 2077,
+  "partitions": {
+    "dev_train": {
+      "samples_count": 1679,
+      "image_groups_count": 1092
+    },
+    "dev_val": {
+      "samples_count": 422,
+      "image_groups_count": 273
+    },
+    "held_out_test": {
+      "samples_count": 1073,
+      "image_groups_count": 712,
+      "dataset_breakdown": {
+        "pope": 359,
+        "a_okvqa": 362,
+        "infoseek": 301,
+        "faithscore": 51
+      }
+    }
+  },
+  "pairwise_leakage_checks": {
+    "dev_train_INTERSECT_dev_val": [],
+    "dev_train_INTERSECT_test": [],
+    "dev_val_INTERSECT_test": []
+  },
+  "assertions": {
+    "dev_train_count_correct": true,
+    "dev_train_groups_correct": true,
+    "dev_val_count_correct": true,
+    "dev_val_groups_correct": true,
+    "held_out_test_count_correct": true,
+    "held_out_test_groups_correct": true,
+    "zero_leakage_pairwise": true
+  }
+}

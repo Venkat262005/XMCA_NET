@@ -1,0 +1,17 @@
+dataset_id: "pope"
+name: "POPE"
+task_type: "object_hallucination_detection"
+total_cohort_samples: 1000
+held_out_test_samples: 359
+validation_samples: 641
+primary_evaluation: "object_grounding"
+limitation: "Yes/no object queries do not identify external knowledge retrieval failures."
+ground_truth_label_mapping:
+  "yes": 0
+  "no": 1
+attribution_focus: "visual_perception"
+supported_baselines:
+  detection: ["halp", "viser", "halloc", "xmca"]
+  localization: ["halloc", "viser"]
+  mitigation: ["opera", "realign"]
+

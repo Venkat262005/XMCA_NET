@@ -1,0 +1,6 @@
+model,method,paradigm,auroc,pr_auc,f1,ece
+llava_1.5_7b,HALP-Adapted (EACL '26),Pre-Gen Probing,0.625,0.225,0.3333333333333333,0.19731666177976878
+llava_1.5_7b,VisER (EMNLP '26),Visual Evidence,1.0,1.0,0.5714285714285714,0.24265285837347067
+llava_1.5_7b,REFIND (SemEval '25),Context Sensitivity,0.0625,0.10902777777777778,0.3333333333333333,0.3212771268972194
+llava_1.5_7b,HalLoc-4 (CVPR '25),Token Localization,,,,
+llava_1.5_7b,XMCA-Net (Ours),Multi-Axis Cross-Attention,0.8868,0.8646,0.7432,0.0557

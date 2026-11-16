@@ -1,0 +1,47 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{Validation Discrimination and Calibration of all 11 HALP-Adapted Probes across Decoder Depths ($N=422$).}
+\label{tab:halp_11probes}
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{VLM Backbone} & \textbf{Probe Target} & \textbf{Feature Type} & \textbf{Input Dim} & \textbf{AUROC} $\uparrow$ & \textbf{PR-AUC} $\uparrow$ & \textbf{F1} $\uparrow$ & \textbf{ECE} $\downarrow$ \\
+\midrule
+LLaVA-1.5-7B & \texttt{vf_pooled} & Visual Feature & 1024 & 0.4069 & 0.1630 & 0.3223 & 0.1763 \\
+LLaVA-1.5-7B & \texttt{vt_pos_1} & Vision Token & 4096 & 0.5843 & 0.2213 & 0.3471 & 0.1795 \\
+LLaVA-1.5-7B & \texttt{vt_pos_L_div_4} & Vision Token & 4096 & 0.4769 & 0.1715 & 0.3205 & 0.1807 \\
+LLaVA-1.5-7B & \texttt{vt_pos_L_div_2} & Vision Token & 4096 & 0.5777 & 0.2378 & 0.3541 & 0.1781 \\
+LLaVA-1.5-7B & \texttt{vt_pos_3L_div_4} & Vision Token & 4096 & 0.6238 & 0.2555 & 0.3663 & 0.1792 \\
+LLaVA-1.5-7B & \texttt{vt_pos_L} & Vision Token & 4096 & 0.4598 & 0.1792 & 0.3166 & 0.1791 \\
+LLaVA-1.5-7B & \texttt{qt_pos_1} & Query Token & 4096 & 0.3990 & 0.1472 & 0.3271 & 0.1790 \\
+LLaVA-1.5-7B & \texttt{qt_pos_L_div_4} & Query Token & 4096 & 0.4813 & 0.1775 & 0.3218 & 0.1798 \\
+LLaVA-1.5-7B & \texttt{qt_pos_L_div_2} & Query Token & 4096 & 0.5136 & 0.1998 & 0.3203 & 0.1802 \\
+LLaVA-1.5-7B & \texttt{qt_pos_3L_div_4} & Query Token & 4096 & 0.4663 & 0.1702 & 0.3270 & 0.1771 \\
+LLaVA-1.5-7B & \texttt{qt_pos_L} & Query Token & 4096 & 0.5361 & 0.2243 & 0.3257 & 0.1794 \\
+\midrule
+Qwen2-VL-7B & \texttt{vf_pooled} & Visual Feature & 1280 & 0.4603 & 0.1705 & 0.3226 & 0.1781 \\
+Qwen2-VL-7B & \texttt{vt_pos_1} & Vision Token & 3584 & 0.4584 & 0.1612 & 0.3160 & 0.1789 \\
+Qwen2-VL-7B & \texttt{vt_pos_L_div_4} & Vision Token & 3584 & 0.4758 & 0.1771 & 0.3203 & 0.1788 \\
+Qwen2-VL-7B & \texttt{vt_pos_L_div_2} & Vision Token & 3584 & 0.6136 & 0.2526 & 0.3544 & 0.1787 \\
+Qwen2-VL-7B & \texttt{vt_pos_3L_div_4} & Vision Token & 3584 & 0.5151 & 0.1980 & 0.3305 & 0.1790 \\
+Qwen2-VL-7B & \texttt{vt_pos_L} & Vision Token & 3584 & 0.5190 & 0.1957 & 0.3194 & 0.1794 \\
+Qwen2-VL-7B & \texttt{qt_pos_1} & Query Token & 3584 & 0.4870 & 0.2093 & 0.3198 & 0.1794 \\
+Qwen2-VL-7B & \texttt{qt_pos_L_div_4} & Query Token & 3584 & 0.5540 & 0.1950 & 0.3464 & 0.1793 \\
+Qwen2-VL-7B & \texttt{qt_pos_L_div_2} & Query Token & 3584 & 0.6548 & 0.2670 & 0.3902 & 0.1780 \\
+Qwen2-VL-7B & \texttt{qt_pos_3L_div_4} & Query Token & 3584 & 0.6485 & 0.3246 & 0.3706 & 0.1790 \\
+Qwen2-VL-7B & \texttt{qt_pos_L} & Query Token & 3584 & 0.5009 & 0.1942 & 0.3217 & 0.1792 \\
+\midrule
+InternVL2-2B & \texttt{vf_pooled} & Visual Feature & 1024 & 0.5419 & 0.1979 & 0.3311 & 0.1820 \\
+InternVL2-2B & \texttt{vt_pos_1} & Vision Token & 1536 & 0.4846 & 0.1791 & 0.3166 & 0.1781 \\
+InternVL2-2B & \texttt{vt_pos_L_div_4} & Vision Token & 1536 & 0.4706 & 0.1763 & 0.3160 & 0.1805 \\
+InternVL2-2B & \texttt{vt_pos_L_div_2} & Vision Token & 1536 & 0.4628 & 0.1630 & 0.3187 & 0.1789 \\
+InternVL2-2B & \texttt{vt_pos_3L_div_4} & Vision Token & 1536 & 0.4904 & 0.1788 & 0.3268 & 0.1808 \\
+InternVL2-2B & \texttt{vt_pos_L} & Vision Token & 1536 & 0.5371 & 0.2100 & 0.3286 & 0.1792 \\
+InternVL2-2B & \texttt{qt_pos_1} & Query Token & 1536 & 0.4620 & 0.1603 & 0.3341 & 0.1783 \\
+InternVL2-2B & \texttt{qt_pos_L_div_4} & Query Token & 1536 & 0.5125 & 0.1871 & 0.3278 & 0.1796 \\
+InternVL2-2B & \texttt{qt_pos_L_div_2} & Query Token & 1536 & 0.6637 & 0.2865 & 0.4066 & 0.1761 \\
+InternVL2-2B & \texttt{qt_pos_3L_div_4} & Query Token & 1536 & 0.5291 & 0.2100 & 0.3177 & 0.1815 \\
+InternVL2-2B & \texttt{qt_pos_L} & Query Token & 1536 & 0.4164 & 0.1556 & 0.3160 & 0.1798 \\
+\bottomrule
+\end{tabular}
+\end{table*}

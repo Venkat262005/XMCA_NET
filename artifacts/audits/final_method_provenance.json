@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-11-16T13:46:55Z",
+  "methods": {
+    "XMCA-Net": {
+      "role": "Proposed Method",
+      "paradigm": "Multi-Axis Cross-Attention Consistency Attribution Network",
+      "output_type": "Calibrated Hallucination Probability & 3-Way Cause Attribution",
+      "status": "FROZEN_EVALUATION",
+      "axes": [
+        "Perception Consistency (S_P)",
+        "Retrieval Relevance (S_R)",
+        "Evidence Utilization (S_U)"
+      ],
+      "combiner_architecture": "CrossModalTransformerEncoder + Attribution Head + TemperatureScaler"
+    },
+    "HALP-Adapted": {
+      "role": "Baseline 1",
+      "paradigm": "Pre-generation Probing on Hidden States",
+      "official_source": "https://github.com/Zesearch/HALP.git",
+      "citation": "HALP: Hallucination Prediction via Pre-Generation Probing (EACL 2026)",
+      "output_type": "Binary Hallucination Probability (Pre-generation Risk)",
+      "status": "EXECUTED_DEVELOPMENT_TRAINED",
+      "probe_architecture": "3-layer MLP (Input -> 512 -> 256 -> 1)",
+      "total_probes_evaluated": 11,
+      "positions_evaluated": {
+        "visual_features": [
+          "vf_pooled"
+        ],
+        "vision_tokens": [
+          "vt_pos_1",
+          "vt_pos_L_div_4",
+          "vt_pos_L_div_2",
+          "vt_pos_3L_div_4",
+          "vt_pos_L"
+        ],
+        "query_tokens": [
+          "qt_pos_1",
+          "qt_pos_L_div_4",
+          "qt_pos_L_div_2",
+          "qt_pos_3L_div_4",
+          "qt_pos_L"
+        ]
+      }
+    },
+    "VisER": {
+      "role": "Baseline 2",
+      "paradigm": "Visual Evidence and Visual Reliance Grounding",
+      "official_source": "https://github.com/AfsanehEB/VisER.git",
+      "citation": "VisER: Visual Evidence and Reliance for Object Hallucination Detection in LVLMs (EMNLP 2026)",
+      "output_type": "Object-Level Visual Grounding Failure Score",
+      "status": "EXECUTED_ADAPTED_PROXY",
+      "formulation": "Composite score of Visual Evidence (VE) and Visual Reliance (VR = VE - language_prior)"
+    },
+    "REFIND": {
+      "role": "Baseline 3",
+      "paradigm": "Context Sensitivity Ratio (CSR)",
+      "official_source": "https://github.com/oneonlee/REFIND.git",
+      "citation": "REFIND: Retrieval-Augmented Factuality Hallucination Detection (SemEval@ACL 2025)",
+      "output_type": "Context Sensitivity Ratio & Retrieval Sensitivity",
+      "status": "EXECUTED_VLM_ADAPTED",
+      "formulation": "CSR(t_i) = log p(t_i | D, I, q) / log p(t_i | I, q)"
+    },
+    "HalLoc": {
+      "role": "Baseline 4",
+      "paradigm": "Multi-Head Token-Level Localization",
+      "official_source": "https://github.com/dbsltm/cvpr25_halloc.git",
+      "citation": "HalLoc: Token-level Localization of Hallucinations for Vision-Language Models (CVPR 2025)",
+      "official_categories": [
+        "object",
+        "attribute",
+        "relationship",
+        "scene"
+      ],
+      "optional_extension": "other",
+      "output_type": "Token-level category localization distributions",
+      "status": "STOPPED_MISSING_TOKEN_ANNOTATIONS",
+      "stop_justification": "POPE, FaithScore, InfoSeek, and A-OKVQA benchmarks do not provide ground-truth token-level multi-class hallucination annotations. Training on response-level proxies violates experimental validity."
+    },
+    "OPERA": {
+      "role": "Baseline 5",
+      "paradigm": "Over-Trust Penalty & Retrospection-Allocation",
+      "official_source": "https://github.com/shikiw/OPERA.git",
+      "citation": "OPERA: Alleviating Hallucination via Over-Trust Penalty & Retrospection-Allocation (CVPR 2024)",
+      "output_type": "Mitigated Text Generation (Beam Search Intervention)",
+      "status": "EXECUTED_MITIGATION_EVALUATION",
+      "venue_type": "Active Decoding Mitigation"
+    },
+    "Re-Align": {
+      "role": "Baseline 6",
+      "paradigm": "Retrieval-Augmented Direct Preference Optimization (rDPO)",
+      "official_source": "https://github.com/taco-group/Re-Align.git",
+      "citation": "Re-Align: Aligning Vision-Language Models via Retrieval-Augmented Direct Preference Optimization (2025)",
+      "output_type": "Preference-Aligned Model Generation",
+      "status": "EXECUTED_MITIGATION_EVALUATION",
+      "venue_type": "Preference Alignment Mitigation"
+    }
+  }
+}

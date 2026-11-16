@@ -1,0 +1,14 @@
+dataset_id: "infoseek"
+name: "InfoSeek"
+task_type: "knowledge_intensive_vqa"
+total_cohort_samples: 1000
+held_out_test_samples: 301
+validation_samples: 699
+primary_evaluation: "knowledge_intensive_factual_qa"
+limitation: "Answer correctness alone does not pinpoint whether retrieval failed or evidence was ignored."
+attribution_focus: "retrieval_and_utilization"
+supported_baselines:
+  detection: ["refind", "halp", "halloc", "xmca"]
+  localization: ["refind", "halloc"]
+  mitigation: ["realign"]
+

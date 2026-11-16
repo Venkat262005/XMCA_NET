@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-11-16T13:47:10Z",
+  "held_out_samples_evaluated": 1073,
+  "image_groups_evaluated": 712,
+  "models_evaluated": [
+    "llava_1.5_7b",
+    "qwen2_vl_7b",
+    "internvl2_2b"
+  ],
+  "methods_evaluated": [
+    "XMCA-Net",
+    "HALP-Adapted",
+    "VisER",
+    "REFIND",
+    "HalLoc-4 (Stopped)",
+    "OPERA",
+    "Re-Align"
+  ],
+  "prediction_parquets": [
+    "halp_llava_1.5_7b_test_predictions.parquet",
+    "viser_llava_1.5_7b_test_predictions.parquet",
+    "refind_llava_1.5_7b_test_predictions.parquet",
+    "xmca_llava_1.5_7b_test_predictions.parquet",
+    "halp_qwen2_vl_7b_test_predictions.parquet",
+    "viser_qwen2_vl_7b_test_predictions.parquet",
+    "refind_qwen2_vl_7b_test_predictions.parquet",
+    "xmca_qwen2_vl_7b_test_predictions.parquet",
+    "halp_internvl2_2b_test_predictions.parquet",
+    "viser_internvl2_2b_test_predictions.parquet",
+    "refind_internvl2_2b_test_predictions.parquet",
+    "xmca_internvl2_2b_test_predictions.parquet"
+  ]
+}

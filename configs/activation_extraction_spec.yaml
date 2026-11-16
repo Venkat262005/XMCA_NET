@@ -1,0 +1,67 @@
+# Configuration specification for authentic VLM activation logging and probe extraction
+# Ensures model-specific layer indices match the true number of decoder layers per architecture.
+
+models:
+  llava_1.5_7b:
+    model_id: "llava-hf/llava-1.5-7b-hf"
+    resolved_full_sha: "a272c74b2481d8aff3aa6fc2c4bf891fe57334fb"
+    architecture: "LlavaForConditionalGeneration"
+    num_decoder_layers: 32
+    hidden_dim: 4096
+    vision_tower: "openai/clip-vit-large-patch14-336"
+    halp_layer_indices:
+      vf: "vision_tower_pooled" # 1 Visual Feature (VF) probe
+      vt_1based: [1, 8, 16, 24, 32] # 5 Vision Token (VT) positions: {1, L/4, L/2, 3L/4, L}
+      vt_0based: [0, 7, 15, 23, 31] # Exact 0-based Python indices
+      qt_1based: [1, 8, 16, 24, 32] # 5 Query Token (QT) positions: {1, L/4, L/2, 3L/4, L}
+      qt_0based: [0, 7, 15, 23, 31] # Exact 0-based Python indices
+    image_preprocessing:
+      size: 336
+      crop: "center"
+      mean: [0.48145466, 0.4578275, 0.40821073]
+      std: [0.26862954, 0.26130258, 0.27577711]
+
+  qwen2_vl_7b:
+    model_id: "Qwen/Qwen2-VL-7B-Instruct"
+    resolved_full_sha: "eed13092ef92e448dd6875b2a00151bd3f7db0ac"
+    architecture: "Qwen2VLForConditionalGeneration"
+    num_decoder_layers: 28
+    hidden_dim: 3584
+    vision_tower: "native_dynamic_resolution_vit"
+    halp_layer_indices:
+      vf: "visual_merger_pooled"
+      vt_1based: [1, 7, 14, 21, 28] # 5 VT positions: {1, L/4, L/2, 3L/4, L}
+      vt_0based: [0, 6, 13, 20, 27] # Exact 0-based Python indices
+      qt_1based: [1, 7, 14, 21, 28] # 5 QT positions: {1, L/4, L/2, 3L/4, L}
+      qt_0based: [0, 6, 13, 20, 27] # Exact 0-based Python indices
+    image_preprocessing:
+      min_pixels: 3136
+      max_pixels: 12845056
+
+  internvl2_2b:
+    model_id: "OpenGVLab/InternVL2-2B"
+    resolved_full_sha: "e4f6747bd20f139e637642c6a058c6bd00b36919"
+    architecture: "InternVLChatModel"
+    num_decoder_layers: 24
+    hidden_dim: 1536
+    vision_tower: "OpenGVLab/InternViT-300M-448px"
+    halp_layer_indices:
+      vf: "internvit_pooled"
+      vt_1based: [1, 6, 12, 18, 24] # 5 VT positions: {1, L/4, L/2, 3L/4, L}
+      vt_0based: [0, 5, 11, 17, 23] # Exact 0-based Python indices
+      qt_1based: [1, 6, 12, 18, 24] # 5 QT positions: {1, L/4, L/2, 3L/4, L}
+      qt_0based: [0, 5, 11, 17, 23] # Exact 0-based Python indices
+    image_preprocessing:
+      input_size: 448
+      max_dynamic_patch: 12
+
+halloc_taxonomy:
+  official_categories:
+    object: "Entity non-existence or hallucinated physical objects"
+    attribute: "False colors, counts, materials, sizes, properties"
+    relationship: "Erroneous spatial positions or interaction assertions"
+    scene: "False background, environment, or location claims"
+  custom_extensions:
+    other: "Custom extension head: uncategorized factual errors or numbers (Non-official)"
+  other: "Uncategorized factual errors, numbers, or ungrounded claims"
+

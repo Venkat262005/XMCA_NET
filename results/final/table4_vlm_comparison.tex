@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Cross-VLM Backbone Detection Robustness of Proposed XMCA-Net on Held-Out Test Set.}
+\label{tab:vlm_comparison}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{VLM Backbone} & \textbf{Architecture} & \textbf{AUROC} $\uparrow$ & \textbf{PR-AUC} $\uparrow$ & \textbf{F1} $\uparrow$ & \textbf{ECE} $\downarrow$ \\
+\midrule
+Qwen2-VL-7B & Qwen2-VL-7B-Instruct & \textbf{0.9187} & \textbf{0.8973} & \textbf{0.7715} & \textbf{0.0464} \\
+LLaVA-1.5-7B & LLaVA-1.5-7B-hf & 0.8868 & 0.8646 & 0.7432 & 0.0557 \\
+InternVL2-2B & InternVL2-2B & 0.8610 & 0.8575 & 0.7200 & 0.0523 \\
+\bottomrule
+\end{tabular}
+\end{table}

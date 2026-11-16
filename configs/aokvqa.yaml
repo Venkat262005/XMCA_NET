@@ -1,0 +1,14 @@
+dataset_id: "a_okvqa"
+name: "A-OKVQA"
+task_type: "knowledge_visual_qa"
+total_cohort_samples: 1000
+held_out_test_samples: 362
+validation_samples: 638
+primary_evaluation: "knowledge_based_visual_qa"
+limitation: "Answer labels alone do not identify root-cause failure mechanisms."
+attribution_focus: "retrieval_and_utilization"
+supported_baselines:
+  detection: ["refind", "halp", "halloc", "xmca"]
+  localization: ["halloc"]
+  mitigation: ["opera", "realign"]
+

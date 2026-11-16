@@ -1,0 +1,171 @@
+{
+  "timestamp": "2026-11-16T13:46:55Z",
+  "total_checkpoints_tracked": 33,
+  "checkpoints": {
+    "halp_internvl2_2b_qt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_qt_pos_1.pt",
+      "sha256": "56b04f30f8f57695a99c59c5f0b5b4302929d80b9628d30a3684555903977c19",
+      "size_bytes": 3703493
+    },
+    "halp_internvl2_2b_qt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_qt_pos_3L_div_4.pt",
+      "sha256": "d31bce3943394c060f385c946f913e0cf5ae48a26d248f617bb1455c2b2ec314",
+      "size_bytes": 3703484
+    },
+    "halp_internvl2_2b_qt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_qt_pos_L.pt",
+      "sha256": "19b33cc7b5bd8e479aebe0c20bfea8f881c02175358ee3e70731047b3bd21c15",
+      "size_bytes": 3703429
+    },
+    "halp_internvl2_2b_qt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_qt_pos_L_div_2.pt",
+      "sha256": "79e4af6e5d98b5105377319dbe5706fefc643570d960db99375ae2ff5e3e0344",
+      "size_bytes": 3703531
+    },
+    "halp_internvl2_2b_qt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_qt_pos_L_div_4.pt",
+      "sha256": "1269ac5b06a785eca0f62c7255421245959a6c749a07b539ecb833847187e28f",
+      "size_bytes": 3703595
+    },
+    "halp_internvl2_2b_vf_pooled.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vf_pooled.pt",
+      "sha256": "5fef3571f802cac07c35fa14875d5e4d23f4b35ed8ab8097155bac4056103436",
+      "size_bytes": 2649046
+    },
+    "halp_internvl2_2b_vt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vt_pos_1.pt",
+      "sha256": "4fee50cbbc1fb89cfaea3795f5b44a92fbd11c995d626ca2e3b0ee23c4d566c6",
+      "size_bytes": 3703365
+    },
+    "halp_internvl2_2b_vt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vt_pos_3L_div_4.pt",
+      "sha256": "65944b303e3d4422899f66388270d8c76c2ea8c88a2234ee05ecc97f4f690a5c",
+      "size_bytes": 3703612
+    },
+    "halp_internvl2_2b_vt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vt_pos_L.pt",
+      "sha256": "9d3f499b586c2f52b0134410b116a221a210cab093fe842c5fa0eff1e0c793dc",
+      "size_bytes": 3703621
+    },
+    "halp_internvl2_2b_vt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vt_pos_L_div_2.pt",
+      "sha256": "2a20599ea04eb53d53046e9fe5b1190ff7e81dabd912e988937071d9d3e0bf7d",
+      "size_bytes": 3703531
+    },
+    "halp_internvl2_2b_vt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_internvl2_2b_vt_pos_L_div_4.pt",
+      "sha256": "79c4c0ea4572cbccf83053b7b6b4dc408bf7771c0b991100e4c2ddc2ccdf844e",
+      "size_bytes": 3703595
+    },
+    "halp_llava_1.5_7b_qt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_qt_pos_1.pt",
+      "sha256": "8a94f7c7b5d018249ba2eab2f351e9905bb60947554823469e63062e2a11af35",
+      "size_bytes": 8975813
+    },
+    "halp_llava_1.5_7b_qt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_qt_pos_3L_div_4.pt",
+      "sha256": "25043609fd44da702b2503dc1e1c28823b6d8c0f2ac60f48a53159b7f30f802c",
+      "size_bytes": 8976060
+    },
+    "halp_llava_1.5_7b_qt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_qt_pos_L.pt",
+      "sha256": "b13835cbe6aabe768347c278f434c439c053fe1ce3502932a9f4fe750c16692c",
+      "size_bytes": 8975877
+    },
+    "halp_llava_1.5_7b_qt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_qt_pos_L_div_2.pt",
+      "sha256": "6ef78f396b76020861bdf7ba2f1b713e301949efb3485590bb222a1ee71e2392",
+      "size_bytes": 8976107
+    },
+    "halp_llava_1.5_7b_qt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_qt_pos_L_div_4.pt",
+      "sha256": "f1fb0c3607bbea915cf42b57dacc29f3f4bca265e5edefea74d85221b2df804e",
+      "size_bytes": 8976299
+    },
+    "halp_llava_1.5_7b_vf_pooled.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vf_pooled.pt",
+      "sha256": "b2293ad139a02949e92bf35c9f958c25b159a2487ae032ee03b7bf733023bce5",
+      "size_bytes": 2648982
+    },
+    "halp_llava_1.5_7b_vt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vt_pos_1.pt",
+      "sha256": "d659480e0853cbf1fb180b9aed325675f73be09874ed88b50d99c57f11a4512a",
+      "size_bytes": 8975941
+    },
+    "halp_llava_1.5_7b_vt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vt_pos_3L_div_4.pt",
+      "sha256": "283b79fd614baf0ef3764166823e96bd86d10f96a88b464ca557553efd730aa2",
+      "size_bytes": 8976060
+    },
+    "halp_llava_1.5_7b_vt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vt_pos_L.pt",
+      "sha256": "b1ba6920b57e3972c1ee9521a1bca3f540527634a7a114779cbb612baba55204",
+      "size_bytes": 8975877
+    },
+    "halp_llava_1.5_7b_vt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vt_pos_L_div_2.pt",
+      "sha256": "e4eaafe4e8713cb66adc7c99ee762e621498a0d4ea90c132521c5f1de9734009",
+      "size_bytes": 8976107
+    },
+    "halp_llava_1.5_7b_vt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_llava_1.5_7b_vt_pos_L_div_4.pt",
+      "sha256": "304558e065756d4773d3b2ce80bae6dbc43f7bf9c7871136f3554f4454ea5604",
+      "size_bytes": 8976171
+    },
+    "halp_qwen2_vl_7b_qt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_qt_pos_1.pt",
+      "sha256": "b7beb4c560e2eb76b6249865fc1e8f2ab82074c8bd9dde74b538782ae4bf8f42",
+      "size_bytes": 7921396
+    },
+    "halp_qwen2_vl_7b_qt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_qt_pos_3L_div_4.pt",
+      "sha256": "f5b9c4a87647845c37e59c0d382136e5794223ec48ddfc6065b152a1b0476424",
+      "size_bytes": 7921643
+    },
+    "halp_qwen2_vl_7b_qt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_qt_pos_L.pt",
+      "sha256": "8d473e89d93cec0d5426e517b5c0215e21ca739cc7568bf1778fcf46a52829c6",
+      "size_bytes": 7921460
+    },
+    "halp_qwen2_vl_7b_qt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_qt_pos_L_div_2.pt",
+      "sha256": "06de4150b4fbd392a92966a4d399c816a8001c63dcb63c4dea921f9447d1255d",
+      "size_bytes": 7921562
+    },
+    "halp_qwen2_vl_7b_qt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_qt_pos_L_div_4.pt",
+      "sha256": "ab47aeb8807e6796f5f8b09f18af03614b85f7ced1f9558695b76ccf87a2e0b1",
+      "size_bytes": 7921562
+    },
+    "halp_qwen2_vl_7b_vf_pooled.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vf_pooled.pt",
+      "sha256": "efe07ca620fe8ff3ed9aad61ff26640e0cd4d29ad8582f4973ebc3f898743751",
+      "size_bytes": 3176069
+    },
+    "halp_qwen2_vl_7b_vt_pos_1.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vt_pos_1.pt",
+      "sha256": "8b32ca2b52dfdaa05286e5288b291be264db036e5f0fcb117d81c984bdb2024c",
+      "size_bytes": 7921332
+    },
+    "halp_qwen2_vl_7b_vt_pos_3L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vt_pos_3L_div_4.pt",
+      "sha256": "7e4d5f81351ccb8f615393827bae092afdcebda2043ce1508a4847ab665a7e0d",
+      "size_bytes": 7921579
+    },
+    "halp_qwen2_vl_7b_vt_pos_L.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vt_pos_L.pt",
+      "sha256": "a87cb9d9fd22a63e8bcaa117a6ac3805efe24b15cc225a0bf01b80b8dc6bf172",
+      "size_bytes": 7921396
+    },
+    "halp_qwen2_vl_7b_vt_pos_L_div_2.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vt_pos_L_div_2.pt",
+      "sha256": "b87f58b89017b9fc36ebfd420dd3592ba76fede2d512b042b0ed659bbcfbe1d0",
+      "size_bytes": 7921754
+    },
+    "halp_qwen2_vl_7b_vt_pos_L_div_4.pt": {
+      "path": "artifacts/models/baselines/halp_qwen2_vl_7b_vt_pos_L_div_4.pt",
+      "sha256": "e146d3ad9f46fe1ce7b0fc2567fe68bfc15737f003adf0117de1621dfb36071d",
+      "size_bytes": 7921498
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "audit_status": "PASSED_ZERO_LEAKAGE",
+  "random_seed": 42,
+  "total_cohort_samples": 3174,
+  "total_image_groups": 2077,
+  "partitions": {
+    "dev_train": {
+      "image_groups_count": 1092,
+      "samples_count": 1679
+    },
+    "dev_val": {
+      "image_groups_count": 273,
+      "samples_count": 422
+    },
+    "held_out_test": {
+      "image_groups_count": 712,
+      "samples_count": 1073
+    }
+  },
+  "pairwise_leakage_checks": {
+    "dev_train_INTERSECT_dev_val": [],
+    "dev_train_INTERSECT_test": [],
+    "dev_val_INTERSECT_test": []
+  }
+}

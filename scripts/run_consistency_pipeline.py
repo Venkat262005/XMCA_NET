@@ -50,9 +50,20 @@ MODEL_KEY_ALIASES = {
 }
 
 
+def parse_tier_arg(val: Any) -> int:
+    """Parse tier safely even if passed as empty string or malformed token."""
+    if val is None or val == "" or str(val).strip() == "":
+        env_tier = os.environ.get("TARGET_TIER", "1000")
+        return int(env_tier) if env_tier.isdigit() else 1000
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 1000
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="XMCA-Net Consistency Pipeline Runner")
-    parser.add_argument("--tier", type=int, default=100, choices=[100, 300, 600, 1000],
+    parser.add_argument("--tier", nargs="?", const=1000, type=parse_tier_arg, default=1000,
                         help="Progressive sample tier to evaluate")
     parser.add_argument("--model", type=str, default="llava_1.5_7b",
                         help="Model key to evaluate")

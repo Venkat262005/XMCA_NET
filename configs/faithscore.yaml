@@ -1,0 +1,14 @@
+dataset_id: "faithscore"
+name: "FaithScore"
+task_type: "descriptive_hallucination_evaluation"
+total_cohort_samples: 174
+held_out_test_samples: 51
+validation_samples: 123
+primary_evaluation: "image_grounded_factuality"
+limitation: "Evaluates descriptive atomic facts, but does not inherently assess external web retrieval."
+attribution_focus: "perception_and_utilization"
+supported_baselines:
+  detection: ["halp", "viser", "halloc", "xmca"]
+  localization: ["halloc", "viser"]
+  mitigation: ["opera"]
+

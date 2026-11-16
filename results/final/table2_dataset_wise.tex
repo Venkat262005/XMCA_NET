@@ -1,0 +1,24 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{Dataset-Specific Performance Matrix across 4 Benchmarks on Held-Out Test Split. Best results in \textbf{bold}.}
+\label{tab:dataset_wise_breakdown}
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{VLM Backbone} & \textbf{Dataset} & \textbf{Samples} & \textbf{XMCA AUROC} $\uparrow$ & \textbf{XMCA F1} $\uparrow$ & \textbf{XMCA ECE} $\downarrow$ & \textbf{HALP AUROC} $\uparrow$ & \textbf{HALP F1} $\uparrow$ \\
+\midrule
+LLaVA-1.5-7B & POPE & 359 & \textbf{0.9230} & \textbf{0.7950} & \textbf{0.0290} & 0.4664 & 0.6496 \\
+LLaVA-1.5-7B & A_OKVQA & 362 & \textbf{0.8710} & \textbf{0.7180} & \textbf{0.0510} & --- & 0.0000 \\
+LLaVA-1.5-7B & INFOSEEK & 301 & \textbf{0.8522} & \textbf{0.6948} & \textbf{0.0648} & --- & 0.0000 \\
+LLaVA-1.5-7B & FAITHSCORE & 51 & \textbf{0.9010} & \textbf{0.7650} & \textbf{0.0380} & 0.3846 & 0.6579 \\
+Qwen2-VL-7B & POPE & 359 & \textbf{0.9412} & \textbf{0.8250} & \textbf{0.0210} & 0.3966 & 0.2024 \\
+Qwen2-VL-7B & A_OKVQA & 362 & \textbf{0.9080} & \textbf{0.7480} & \textbf{0.0420} & --- & 0.0000 \\
+Qwen2-VL-7B & INFOSEEK & 301 & \textbf{0.9006} & \textbf{0.7120} & \textbf{0.0546} & --- & 0.0000 \\
+Qwen2-VL-7B & FAITHSCORE & 51 & \textbf{0.9250} & \textbf{0.8010} & \textbf{0.0280} & 0.4308 & 0.1765 \\
+InternVL2-2B & POPE & 359 & \textbf{0.9040} & \textbf{0.7720} & \textbf{0.0340} & 0.4579 & 0.4850 \\
+InternVL2-2B & A_OKVQA & 362 & \textbf{0.8450} & \textbf{0.6950} & \textbf{0.0580} & --- & 0.0000 \\
+InternVL2-2B & INFOSEEK & 301 & \textbf{0.8130} & \textbf{0.6720} & \textbf{0.0762} & --- & 0.0000 \\
+InternVL2-2B & FAITHSCORE & 51 & \textbf{0.8820} & \textbf{0.7410} & \textbf{0.0410} & 0.5015 & 0.5000 \\
+\bottomrule
+\end{tabular}
+\end{table*}

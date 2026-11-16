@@ -1,0 +1,10 @@
+model,method,venue,hallucination_rate_pct,vqa_accuracy_pct,latency_ms_per_sample,intervention_events
+LLaVA-1.5-7B,Base VLM (Unaligned),Baseline,32.4,67.6,128.5,0
+LLaVA-1.5-7B,OPERA,CVPR '24,25.6,71.8,173.5,300
+LLaVA-1.5-7B,Re-Align,EMNLP '25,24.0,72.7,128.5,0
+Qwen2-VL-7B,Base VLM (Unaligned),Baseline,28.1,71.9,142.0,0
+Qwen2-VL-7B,OPERA,CVPR '24,22.3,75.8,191.7,268
+Qwen2-VL-7B,Re-Align,EMNLP '25,20.5,76.9,142.0,0
+InternVL2-2B,Base VLM (Unaligned),Baseline,36.8,63.2,95.0,0
+InternVL2-2B,OPERA,CVPR '24,29.8,67.4,128.2,343
+InternVL2-2B,Re-Align,EMNLP '25,27.9,68.5,95.0,0

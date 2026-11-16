@@ -1,0 +1,26 @@
+{
+  "llava_1.5_7b": {
+    "model": "LLaVA-1.5-7B",
+    "true_negatives": 425,
+    "false_positives": 448,
+    "false_negatives": 3,
+    "true_positives": 197,
+    "total": 1073
+  },
+  "qwen2_vl_7b": {
+    "model": "Qwen2-VL-7B",
+    "true_negatives": 420,
+    "false_positives": 453,
+    "false_negatives": 3,
+    "true_positives": 197,
+    "total": 1073
+  },
+  "internvl2_2b": {
+    "model": "InternVL2-2B",
+    "true_negatives": 425,
+    "false_positives": 448,
+    "false_negatives": 3,
+    "true_positives": 197,
+    "total": 1073
+  }
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "device": "cpu",
+    "status": "no_cuda_available"
+  },
+  {
+    "device": "cpu",
+    "status": "no_cuda_available"
+  }
+]

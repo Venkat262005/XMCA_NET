@@ -1,0 +1,20 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Tri-Axis Diagnostic Feature Synergistic Ablation for XMCA-Net (Qwen2-VL-7B).}
+\label{tab:xmca_ablation}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Configuration} & \textbf{Active Consistency Axes} & \textbf{AUROC} $\uparrow$ & \textbf{PR-AUC} $\uparrow$ \\
+\midrule
+Retrieval Consistency ($S_R$) only & Knowledge Retrieval & 0.5120 & 0.4930 \\
+Evidence Utilization ($S_U$) only & NLI Reasoning & 0.6635 & 0.6280 \\
+Visual Grounding ($S_P$) only & Open-Vocabulary Grounding & 0.7842 & 0.7610 \\
+Pairwise: $S_R + S_U$ & Retrieval + NLI & 0.6840 & 0.6470 \\
+Pairwise: $S_P + S_R$ & Visual + Retrieval & 0.8150 & 0.7890 \\
+Pairwise: $S_P + S_U$ & Visual + NLI & 0.8670 & 0.8340 \\
+\midrule
+\textbf{Full XMCA-Net} & \textbf{Visual + Retrieval + NLI + Gating} & \textbf{0.9187} & \textbf{0.8973} \\
+\bottomrule
+\end{tabular}
+\end{table}

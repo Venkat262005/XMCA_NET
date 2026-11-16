@@ -93,6 +93,16 @@ FEATURE_SETS = {
 ALL_20_FEATURES = FEATURE_SETS["A6_Full_XMCA"]
 
 
+def parse_tier_arg(val: Any) -> Optional[int]:
+    """Parse tier safely even if passed as empty string or malformed token."""
+    if val is None or val == "" or str(val).strip() == "":
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="XMCA-Net Comprehensive Multi-Level Ablation Study Runner")
     parser.add_argument("--features_file", type=str, required=True,
@@ -110,7 +120,7 @@ def parse_args():
                         help="Random seeds for reporting mean ± std across runs")
     parser.add_argument("--epochs", type=int, default=40,
                         help="Training epochs per configuration")
-    parser.add_argument("--tier", type=int, default=None,
+    parser.add_argument("--tier", nargs="?", const=1000, type=parse_tier_arg, default=None,
                         help="Evaluation tier (100, 300, 600, 1000)")
     parser.add_argument("--model", type=str, default=None,
                         help="Evaluated backbone model name")
@@ -492,9 +502,32 @@ def main():
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Auto-resolve missing or empty tier
+    import re
+    if args.tier is None:
+        env_tier = os.environ.get("TARGET_TIER")
+        if env_tier and env_tier.strip().isdigit():
+            args.tier = int(env_tier.strip())
+        else:
+            m = re.search(r"tier_(\d+)", str(args.features_file))
+            args.tier = int(m.group(1)) if m else 1000
+
+    # Auto-resolve missing or empty model
+    if not args.model:
+        for cand in ["llava_1.5_7b", "llava", "qwen2_vl_7b", "qwen2_vl", "internvl2_2b", "internvl"]:
+            if cand in str(args.features_file).lower():
+                args.model = cand
+                break
+
+    # Fix unexpanded shell variable token 'tier__' in features_file if present
+    feat_str = str(args.features_file)
+    if "tier__" in feat_str:
+        feat_str = feat_str.replace("tier__", f"tier_{args.tier}_")
+        args.features_file = feat_str
+
     print("=" * 100)
     print("XMCA-Net Comprehensive Multi-Level Ablation Study (19 Configurations)")
-    print(f"Features: {args.features_file} | Seeds: {args.seeds} | Epochs: {args.epochs}")
+    print(f"Features: {args.features_file} | Tier: {args.tier} | Model: {args.model or 'auto'} | Seeds: {args.seeds} | Epochs: {args.epochs}")
     print("=" * 100)
 
     # 1. Load diagnostic feature representations
@@ -506,10 +539,12 @@ def main():
                 cand_model = list(cand_dir.glob(f"*tier_*{args.model}*features.parquet"))
                 if cand_model:
                     feat_path = cand_model[-1]
+                    print(f"[Notice] Resolved features file to: {feat_path}")
             if not feat_path.exists() and args.tier:
                 cand_tier = list(cand_dir.glob(f"tier_{args.tier}_*.parquet"))
                 if cand_tier:
                     feat_path = cand_tier[0]
+                    print(f"[Notice] Resolved features file to: {feat_path}")
 
     if not feat_path.exists():
         print(f"Error: Features file not found at: {args.features_file}")

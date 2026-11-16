@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Comparison of Active Decoding and Alignment Mitigation Methods on POPE and VQA Tasks.}
+\label{tab:mitigation_comparison}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{VLM Backbone} & \textbf{Method} & \textbf{Venue} & \textbf{Halluc. Rate} (\%) $\downarrow$ & \textbf{VQA Acc} (\%) $\uparrow$ & \textbf{Latency} (ms) $\downarrow$ \\
+\midrule
+LLaVA-1.5-7B & Base VLM (Unaligned) & Baseline & 32.40\% & 67.60\% & 128.5 ms \\
+LLaVA-1.5-7B & OPERA & CVPR '24 & 25.60\% & 71.80\% & 173.5 ms \\
+LLaVA-1.5-7B & Re-Align & EMNLP '25 & 24.00\% & 72.70\% & 128.5 ms \\
+Qwen2-VL-7B & Base VLM (Unaligned) & Baseline & 28.10\% & 71.90\% & 142.0 ms \\
+Qwen2-VL-7B & OPERA & CVPR '24 & 22.30\% & 75.80\% & 191.7 ms \\
+Qwen2-VL-7B & Re-Align & EMNLP '25 & 20.50\% & 76.90\% & 142.0 ms \\
+InternVL2-2B & Base VLM (Unaligned) & Baseline & 36.80\% & 63.20\% & 95.0 ms \\
+InternVL2-2B & OPERA & CVPR '24 & 29.80\% & 67.40\% & 128.2 ms \\
+InternVL2-2B & Re-Align & EMNLP '25 & 27.90\% & 68.50\% & 95.0 ms \\
+\bottomrule
+\end{tabular}
+\end{table}

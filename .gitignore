@@ -85,3 +85,4 @@ htmlcov/
 *.log
 
 kaggle_upload/
+third_party/

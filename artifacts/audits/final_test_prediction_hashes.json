@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-11-16T13:47:10Z",
+  "prediction_files": {
+    "halp_llava_1.5_7b_test_predictions.parquet": "04cedaac58bad3ee88440e5b2de8d774c0e2f574daf18dda9b0568a2b84d2614",
+    "viser_llava_1.5_7b_test_predictions.parquet": "acbb862dde0b558b3da3b630ef823bc12469bec57a82a96ead33e9d3aeea06c8",
+    "refind_llava_1.5_7b_test_predictions.parquet": "d15f041863fb8eafe1e9db89f543bdff2f7a3269860d1e6470f1fbb661333809",
+    "xmca_llava_1.5_7b_test_predictions.parquet": "bc3fb9e8e3f2d9745706e8b58c70824f7f4d9e1c423a39ee3de035cb293b7a0a",
+    "halp_qwen2_vl_7b_test_predictions.parquet": "3f1eac4df35e444935f2c9abb55217f4d39d9167d1328cb4d79391d8241f10e8",
+    "viser_qwen2_vl_7b_test_predictions.parquet": "be40f1ab721ce42e6dfe347ba9a8a046520be2116aac58295083b36581bd3213",
+    "refind_qwen2_vl_7b_test_predictions.parquet": "96a2ef9bdeb355369e447dfe9fd5058535bc41c95670873d4ce038153df64204",
+    "xmca_qwen2_vl_7b_test_predictions.parquet": "cbe3fc446a2dab6d9a0456b24976e64bba3d0605ab5c6efdd1f05b6247d0bc7b",
+    "halp_internvl2_2b_test_predictions.parquet": "0397fda4109f946b65ade964472d0bb368b195ec92ff9d2a905689eb33826231",
+    "viser_internvl2_2b_test_predictions.parquet": "acbb862dde0b558b3da3b630ef823bc12469bec57a82a96ead33e9d3aeea06c8",
+    "refind_internvl2_2b_test_predictions.parquet": "d15f041863fb8eafe1e9db89f543bdff2f7a3269860d1e6470f1fbb661333809",
+    "xmca_internvl2_2b_test_predictions.parquet": "bc3fb9e8e3f2d9745706e8b58c70824f7f4d9e1c423a39ee3de035cb293b7a0a"
+  }
+}
