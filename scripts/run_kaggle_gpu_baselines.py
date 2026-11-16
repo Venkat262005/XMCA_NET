@@ -215,7 +215,7 @@ def run_gpu_benchmark(
         nn.LayerNorm(256),
         nn.GELU(),
         nn.Linear(256, 1),
-    ).to(device)
+    ).float().to(device)
 
     start_bench_time = time.time()
 
@@ -239,8 +239,8 @@ def run_gpu_benchmark(
                 outputs = model(**inputs, output_hidden_states=True)
                 hidden_states = outputs.hidden_states
                 mid_layer = len(hidden_states) // 2
-                # Query token hidden state at middle decoder layer
-                qt_repr = hidden_states[mid_layer][:, -1, :]  # [1, hidden_dim]
+                # Query token hidden state at middle decoder layer (cast to float32 for probe)
+                qt_repr = hidden_states[mid_layer][:, -1, :].float()
                 if halp_probe is not None:
                     h_val = halp_probe.predict_score(qt_repr[0].cpu().numpy())
                 else:
@@ -249,11 +249,12 @@ def run_gpu_benchmark(
 
                 # --- VisER: Real Visual Evidence vs Prior ---
                 # Logit probability under image conditioning
-                ve_prob = torch.softmax(outputs.logits[0, -1], dim=-1).max().item()
-                # Text-only prior forward pass
-                text_inputs = processor(text=f"USER: {q_text}\nASSISTANT:", return_tensors="pt").to(device)
-                text_outputs = model(**text_inputs)
-                prior_prob = torch.softmax(text_outputs.logits[0, -1], dim=-1).max().item()
+                ve_prob = torch.softmax(outputs.logits[0, -1].float(), dim=-1).max().item()
+                # Prior forward pass using blank neutral image (robust across all VLM architectures)
+                blank_image = Image.new("RGB", (336, 336), color=(0, 0, 0))
+                prior_inputs = processor(text=prompt, images=blank_image, return_tensors="pt").to(device)
+                prior_outputs = model(**prior_inputs)
+                prior_prob = torch.softmax(prior_outputs.logits[0, -1].float(), dim=-1).max().item()
                 viser_score = -(np.log(ve_prob + 1e-8) - np.log(prior_prob + 1e-8))
                 viser_scores.append(float(viser_score))
 
@@ -262,7 +263,7 @@ def run_gpu_benchmark(
                 ctx_prompt = f"USER: <image>\nReference: {dummy_context}\nQuestion: {q_text}\nASSISTANT:"
                 ctx_inputs = processor(text=ctx_prompt, images=image, return_tensors="pt").to(device)
                 ctx_outputs = model(**ctx_inputs)
-                p_ctx = torch.softmax(ctx_outputs.logits[0, -1], dim=-1).max().item()
+                p_ctx = torch.softmax(ctx_outputs.logits[0, -1].float(), dim=-1).max().item()
                 p_no_ctx = ve_prob
                 csr = np.log(p_ctx + 1e-8) / (np.log(p_no_ctx + 1e-8) + 1e-8)
                 refind_scores.append(float(-csr))
