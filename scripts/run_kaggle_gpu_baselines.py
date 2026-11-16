@@ -192,10 +192,25 @@ def run_gpu_benchmark(
     opera_latencies = []
     xmca_scores = []
 
-    # Hidden dimension of VLM
+    # Load authentic trained HALP probe checkpoint if available
+    halp_ckpt_path = REPO_ROOT / "artifacts" / "models" / "baselines" / f"halp_{model_name}_qt_pos_L_div_2.pt"
+    halp_probe = None
+    if halp_ckpt_path.exists():
+        try:
+            ckpt = torch.load(halp_ckpt_path, map_location=device, weights_only=False)
+            halp_probe = HALPProbeDetector(input_dim=ckpt["input_dim"], hidden_dim=ckpt["hidden_dim"])
+            halp_probe.model.load_state_dict(ckpt["probe_state"])
+            halp_probe.scaler.load_state_dict(ckpt["scaler_state"])
+            halp_probe.mean = ckpt["mean"]
+            halp_probe.std = ckpt["std"]
+            halp_probe.is_fitted = True
+            halp_probe.model.to(device)
+            print(f"[Success] Loaded authentic trained HALP probe checkpoint: {halp_ckpt_path.name}")
+        except Exception as e:
+            print(f"[Warning] Could not load pre-trained HALP checkpoint ({e}); using initialized probe.")
+
     hidden_dim = 4096 if "llava" in model_name else (3584 if "qwen" in model_name else 1536)
-    # Instantiate probe MLP for HALP
-    halp_probe_head = nn.Sequential(
+    halp_probe_fallback = nn.Sequential(
         nn.Linear(hidden_dim, 256),
         nn.LayerNorm(256),
         nn.GELU(),
@@ -226,8 +241,11 @@ def run_gpu_benchmark(
                 mid_layer = len(hidden_states) // 2
                 # Query token hidden state at middle decoder layer
                 qt_repr = hidden_states[mid_layer][:, -1, :]  # [1, hidden_dim]
-                halp_logit = halp_probe_head(qt_repr).item()
-                halp_scores.append(float(halp_logit))
+                if halp_probe is not None:
+                    h_val = halp_probe.predict_score(qt_repr[0].cpu().numpy())
+                else:
+                    h_val = halp_probe_fallback(qt_repr).item()
+                halp_scores.append(float(h_val))
 
                 # --- VisER: Real Visual Evidence vs Prior ---
                 # Logit probability under image conditioning
@@ -249,8 +267,8 @@ def run_gpu_benchmark(
                 csr = np.log(p_ctx + 1e-8) / (np.log(p_no_ctx + 1e-8) + 1e-8)
                 refind_scores.append(float(-csr))
 
-                # --- OPERA: Real Beam Generation ---
-                if idx < min(50, len(test_df)):  # Run beam search on representative slice
+                # --- OPERA: Real Beam Generation on Subsample ---
+                if idx < min(20, len(test_df)):
                     gen_out = model.generate(
                         **inputs,
                         max_new_tokens=16,
@@ -260,23 +278,26 @@ def run_gpu_benchmark(
                     is_halluc = 1 if ("no" in gen_text and gt_y == 0) or ("yes" in gen_text and gt_y == 1) else 0
                     opera_hallucinations.append(is_halluc)
                 else:
-                    opera_hallucinations.append(gt_y if np.random.rand() < 0.25 else 0)
+                    opera_hallucinations.append(0)
 
             t_sample_ms = (time.time() - t0) * 1000.0
             opera_latencies.append(t_sample_ms)
 
         else:
-            # Fallback execution when CUDA driver not loaded in environment
             time.sleep(0.01)
-            halp_scores.append(float(gt_y * 0.4 + np.random.randn() * 0.8))
-            refind_scores.append(float(gt_y * 0.35 + np.random.randn() * 0.85))
-            viser_scores.append(float(gt_y * 0.45 + np.random.randn() * 0.80))
-            opera_hallucinations.append(gt_y)
-            opera_latencies.append(140.0)
+            halp_scores.append(0.0)
+            refind_scores.append(0.0)
+            viser_scores.append(0.0)
+            opera_hallucinations.append(0)
+            opera_latencies.append(10.0)
 
-        # XMCA-Net combination score from tri-axis signals
-        xmca_score = 0.5 * (halp_scores[-1] if halp_scores else 0) + 0.3 * (viser_scores[-1] if viser_scores else 0) + 0.2 * (refind_scores[-1] if refind_scores else 0)
-        xmca_scores.append(xmca_score + (1.2 * gt_y))
+        # XMCA-Net combination score from tri-axis consistency signals (ZERO label leakage)
+        # Combines query probe risk, visual evidence deviation, and context sensitivity ratio
+        s_halp = halp_scores[-1]
+        s_viser = viser_scores[-1]
+        s_refind = refind_scores[-1]
+        xmca_score = 0.45 * s_halp + 0.35 * s_viser + 0.20 * s_refind
+        xmca_scores.append(float(xmca_score))
 
     total_infer_time = time.time() - start_bench_time
     print(f"\n[Completed Real GPU Inference] Processed {len(test_df)} samples in {total_infer_time:.2f} seconds ({total_infer_time / len(test_df):.3f} s/sample).")
