@@ -142,14 +142,21 @@ class HALPProbeDetector:
 
         self.is_fitted = True
 
+    def to(self, device: str):
+        """Move probe model and scaler to target device."""
+        self.model.to(device)
+        self.scaler.to(device)
+        return self
+
     def predict_score(self, x: np.ndarray) -> float:
         """Predict continuous raw logit score for a single sample (higher = higher hallucination risk)."""
         self.model.eval()
         x_arr = np.asarray(x, dtype=np.float32)
         if self.mean is not None and self.std is not None:
             x_arr = (x_arr - self.mean) / self.std
+        device = next(self.model.parameters()).device
         with torch.no_grad():
-            x_tensor = torch.tensor(x_arr, dtype=torch.float32).unsqueeze(0)
+            x_tensor = torch.tensor(x_arr, dtype=torch.float32, device=device).unsqueeze(0)
             logit = self.model(x_tensor).item()
         return float(logit)
 
@@ -159,8 +166,9 @@ class HALPProbeDetector:
         x_arr = np.asarray(x, dtype=np.float32)
         if self.mean is not None and self.std is not None:
             x_arr = (x_arr - self.mean) / self.std
+        device = next(self.model.parameters()).device
         with torch.no_grad():
-            x_tensor = torch.tensor(x_arr, dtype=torch.float32).unsqueeze(0)
+            x_tensor = torch.tensor(x_arr, dtype=torch.float32, device=device).unsqueeze(0)
             logit = self.model(x_tensor)
             scaled = self.scaler(logit)
             prob = torch.sigmoid(scaled).item()

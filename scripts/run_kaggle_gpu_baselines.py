@@ -204,7 +204,7 @@ def run_gpu_benchmark(
             halp_probe.mean = ckpt["mean"]
             halp_probe.std = ckpt["std"]
             halp_probe.is_fitted = True
-            halp_probe.model.to(device)
+            halp_probe.to(device)
             print(f"[Success] Loaded authentic trained HALP probe checkpoint: {halp_ckpt_path.name}")
         except Exception as e:
             print(f"[Warning] Could not load pre-trained HALP checkpoint ({e}); using initialized probe.")
