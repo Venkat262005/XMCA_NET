@@ -136,8 +136,12 @@ else:
     print(f"Cloning repository from {REPO_URL} (branch: {BRANCH})...")
     subprocess.run(["git", "clone", "-b", BRANCH, REPO_URL, str(WORKDIR)], check=True)
 
-# Pull latest commits
-subprocess.run(["git", "-C", str(WORKDIR), "pull", "origin", BRANCH], check=False)
+# Pull latest commits cleanly without any merge conflicts
+try:
+    subprocess.run(["git", "-C", str(WORKDIR), "fetch", "origin", BRANCH], check=False)
+    subprocess.run(["git", "-C", str(WORKDIR), "reset", "--hard", f"origin/{BRANCH}"], check=False)
+except Exception as e:
+    print(f"[Notice] Git sync notice: {e}")
 
 if str(WORKDIR) not in sys.path:
     sys.path.insert(0, str(WORKDIR))
@@ -188,11 +192,20 @@ corpus_df = pd.read_parquet(corpus_path)
 print("=" * 70)
 print(f"[Cohort Manifest] Total Records: {len(manifest_df)} | SHA-256: {sha256_file(manifest_path)[:16]}...")
 print("Distribution by Partition and Benchmark Dataset:")
-split_col = "split" if "split" in manifest_df.columns else ("original_split" if "original_split" in manifest_df.columns else None)
-if split_col:
-    print(pd.crosstab(manifest_df[split_col], manifest_df['dataset_id'], margins=True))
-else:
-    print(manifest_df['dataset_id'].value_counts())
+try:
+    split_col = None
+    for cand_col in ["split", "original_split", "partition"]:
+        if cand_col in manifest_df.columns:
+            split_col = cand_col
+            break
+    if split_col and "dataset_id" in manifest_df.columns:
+        print(pd.crosstab(manifest_df[split_col], manifest_df['dataset_id'], margins=True))
+    elif "dataset_id" in manifest_df.columns:
+        print(manifest_df['dataset_id'].value_counts())
+    else:
+        print(manifest_df.head(2))
+except Exception as e:
+    print(f"[Notice] Summary check: {e}")
 print("-" * 70)
 print(f"[Knowledge Corpus] Total Passages: {len(corpus_df)} | SHA-256: {sha256_file(corpus_path)[:16]}...")
 print("=" * 70)
