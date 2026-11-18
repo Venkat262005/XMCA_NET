@@ -33,7 +33,7 @@ from src.features.extractor import DiagnosticFeatureVector
 from src.combiner.combiner import XMCADetectionCombiner
 from src.baselines.halp_probe import HALPProbeDetector
 from src.combiner.model import XMCANetwork, TemperatureScaler
-from scripts.evaluate_detection import evaluate_detection_metrics
+from scripts.evaluate_detection import evaluate_detection_metrics, select_optimal_f1_threshold
 
 
 def sha256_path(path: Path) -> str:
@@ -145,7 +145,7 @@ def main():
     print(f"Device: {device}")
     print(f"{'='*80}\n")
 
-    # Load test features
+    # 1. Load test features
     test_df = load_test_features(features_dir, model_name)
     y_test = test_df["ground_truth_label"].values.astype(int)
 
@@ -156,11 +156,47 @@ def main():
     if len(test_df) == 0:
         raise RuntimeError("Zero test samples — cannot evaluate.")
 
-    # Build DiagnosticFeatureVectors for all test samples
+    # 2. Load validation features to select zero-leakage decision thresholds
+    val_path = features_dir / f"genuine_features_{model_name}_dev_val.parquet"
+    val_df = pd.read_parquet(val_path) if val_path.exists() else None
+    if val_df is not None:
+        y_val = val_df["ground_truth_label"].values.astype(int)
+        print(f"Validation set: {len(val_df)} samples (used for zero-leakage threshold selection)")
+    else:
+        y_val = None
+        print("[Notice] dev_val parquet not found; thresholds will use 0.5 default.")
+
+    # Build DiagnosticFeatureVectors
     test_vecs = [df_row_to_vector(row) for _, row in test_df.iterrows()]
+    val_vecs = [df_row_to_vector(row) for _, row in val_df.iterrows()] if val_df is not None else []
 
     # ----------------------------------------------------------------
-    # 1. XMCA-Net (Ours) — genuine trained neural combiner
+    # Baseline Model Setup: HALP Probe
+    # ----------------------------------------------------------------
+    best_halp_target = "qt_pos_L_div_2"
+    halp_ckpt = halp_dir / f"halp_{model_name}_{best_halp_target}.pt"
+    halp_probe = None
+    halp_scores = np.zeros(len(test_df))
+    halp_cols = ["sp_score", "visual_support_ratio", "visual_contradiction_ratio",
+                 "visual_coverage", "grounding_uncertainty"]
+
+    if halp_ckpt.exists():
+        halp_probe = load_halp_probe(halp_ckpt, device)
+        X_halp_test = test_df[halp_cols].values.astype(np.float32)
+        halp_scores = np.array([halp_probe.predict_score(X_halp_test[i]) for i in range(len(X_halp_test))])
+        print(f"[HALP]   Loaded genuine probe: {halp_ckpt.name}")
+    else:
+        halp_scores = test_df["sp_score"].values.astype(np.float32)
+        print(f"[HALP]   Genuine probe checkpoint not found — using raw sp_score.")
+
+    # ----------------------------------------------------------------
+    # Baseline Model Setup: VisER & REFIND
+    # ----------------------------------------------------------------
+    viser_scores = test_df["sp_score"].values.astype(np.float32)
+    refind_scores = -test_df["sr_score"].values.astype(np.float32)
+
+    # ----------------------------------------------------------------
+    # Proposed Model: XMCA-Net Combiner
     # ----------------------------------------------------------------
     xmca_ckpt = combiner_dir / f"xmca_{model_name}_combiner.pt"
     combiner = load_xmca_combiner(xmca_ckpt, device)
@@ -174,49 +210,54 @@ def main():
         xmca_scaled = combiner.scaler(xmca_logits)
         xmca_probs = torch.sigmoid(xmca_scaled).cpu().numpy()
 
-    m_xmca = evaluate_detection_metrics(y_test, xmca_probs)
-    print(f"\n[XMCA-Net] AUROC={m_xmca['auroc']:.4f} | PR-AUC={m_xmca['pr_auc']:.4f} | F1={m_xmca['f1']:.4f} | ECE={m_xmca['ece']:.4f}")
-
     # ----------------------------------------------------------------
-    # 2. HALP — genuine trained probe (best probe: qt_pos_L_div_2)
+    # Zero-Leakage Decision Threshold Selection on dev_val
     # ----------------------------------------------------------------
-    best_halp_target = "qt_pos_L_div_2"
-    halp_ckpt = halp_dir / f"halp_{model_name}_{best_halp_target}.pt"
-    halp_probe = None
-    halp_scores = np.zeros(len(test_df))
+    if val_df is not None and y_val is not None:
+        # HALP val threshold
+        if halp_probe is not None:
+            X_halp_val = val_df[halp_cols].values.astype(np.float32)
+            val_halp_scores = np.array([halp_probe.predict_score(X_halp_val[i]) for i in range(len(X_halp_val))])
+        else:
+            val_halp_scores = val_df["sp_score"].values.astype(np.float32)
+        th_halp = select_optimal_f1_threshold(val_halp_scores, y_val)
 
-    if halp_ckpt.exists():
-        halp_probe = load_halp_probe(halp_ckpt, device)
-        # HALP input uses the perception features matching probe's training columns
-        halp_cols = ["sp_score", "visual_support_ratio", "visual_contradiction_ratio",
-                     "visual_coverage", "grounding_uncertainty"]
-        X_halp = test_df[halp_cols].values.astype(np.float32)
-        halp_scores = np.array([halp_probe.predict_score(X_halp[i]) for i in range(len(X_halp))])
-        print(f"[HALP]  Loaded genuine probe: {halp_ckpt.name}")
+        # VisER val threshold
+        val_viser_scores = val_df["sp_score"].values.astype(np.float32)
+        th_viser = select_optimal_f1_threshold(val_viser_scores, y_val)
+
+        # REFIND val threshold
+        val_refind_scores = -val_df["sr_score"].values.astype(np.float32)
+        th_refind = select_optimal_f1_threshold(val_refind_scores, y_val)
+
+        # XMCA val threshold (calibrated probability threshold)
+        X_val_np = np.stack([v.to_feature_list() for v in val_vecs], axis=0).astype(np.float32)
+        X_val_norm = combiner._normalize_features(X_val_np, fit=False)
+        with torch.no_grad():
+            val_x_t = torch.tensor(X_val_norm, dtype=torch.float32, device=device)
+            val_xmca_logits = combiner.model(val_x_t)
+            val_xmca_scaled = combiner.scaler(val_xmca_logits)
+            val_xmca_probs = torch.sigmoid(val_xmca_scaled).cpu().numpy()
+        th_xmca = select_optimal_f1_threshold(val_xmca_probs, y_val)
     else:
-        # Fall back to raw sp_score from genuine extraction (also a real signal)
-        halp_scores = test_df["sp_score"].values.astype(np.float32)
-        print(f"[HALP]  Genuine probe checkpoint not found — using raw sp_score from extraction.")
+        th_halp = 0.5
+        th_viser = 0.5
+        th_refind = 0.5
+        th_xmca = getattr(combiner, "decision_threshold", 0.5)
 
-    m_halp = evaluate_detection_metrics(y_test, halp_scores)
-    print(f"[HALP]  AUROC={m_halp['auroc']:.4f} | PR-AUC={m_halp['pr_auc']:.4f} | F1={m_halp['f1']:.4f} | ECE={m_halp['ece']:.4f}")
-
-    # ----------------------------------------------------------------
-    # 3. VisER — visual evidence score (genuine sp_score from extraction)
-    # ----------------------------------------------------------------
-    viser_scores = test_df["sp_score"].values.astype(np.float32)
-    m_viser = evaluate_detection_metrics(y_test, viser_scores)
-    print(f"[VisER] AUROC={m_viser['auroc']:.4f} | PR-AUC={m_viser['pr_auc']:.4f} | F1={m_viser['f1']:.4f} | ECE={m_viser['ece']:.4f}")
+    print(f"\n[Validation-Calibrated Thresholds (Zero-Leakage)]")
+    print(f"  HALP: {th_halp:.4f} | VisER: {th_viser:.4f} | REFIND: {th_refind:.4f} | XMCA-Net: {th_xmca:.4f}")
 
     # ----------------------------------------------------------------
-    # 4. REFIND — context sensitivity ratio (genuine sr_score)
+    # 3. Overall Test Metrics
     # ----------------------------------------------------------------
-    refind_scores = -test_df["sr_score"].values.astype(np.float32)  # higher sr_score = more context-sensitive
-    m_refind = evaluate_detection_metrics(y_test, refind_scores)
-    print(f"[REFIND] AUROC={m_refind['auroc']:.4f} | PR-AUC={m_refind['pr_auc']:.4f} | F1={m_refind['f1']:.4f} | ECE={m_refind['ece']:.4f}")
+    m_halp = evaluate_detection_metrics(y_test, halp_scores, fixed_threshold=th_halp)
+    m_viser = evaluate_detection_metrics(y_test, viser_scores, fixed_threshold=th_viser)
+    m_refind = evaluate_detection_metrics(y_test, refind_scores, fixed_threshold=th_refind)
+    m_xmca = evaluate_detection_metrics(y_test, xmca_probs, fixed_threshold=th_xmca)
 
     # ----------------------------------------------------------------
-    # 5. Compile Paper Table 1 — Response-Level Detection
+    # 4. Compile Paper Table 1 — Overall Response-Level Detection
     # ----------------------------------------------------------------
     summary_rows = [
         {"model": model_name, "method": "HALP-Adapted (EACL '26)", "paradigm": "Pre-Gen Probing",
@@ -243,7 +284,38 @@ def main():
     print(f"\n[Saved] {summary_csv}")
 
     # ----------------------------------------------------------------
-    # 6. Save prediction parquet for further analysis
+    # 5. Compile Paper Table 2 — Per-Dataset Breakdown (POPE, FaithScore, A-OKVQA, InfoSeek)
+    # ----------------------------------------------------------------
+    dataset_rows = []
+    target_datasets = ["pope", "faithscore", "a_okvqa", "infoseek"]
+
+    for d_name in target_datasets:
+        mask = (test_df["dataset_id"].str.lower() == d_name).values
+        n_d = int(np.sum(mask))
+        if n_d == 0:
+            continue
+        y_d = y_test[mask]
+        pos_d = int(np.sum(y_d == 1))
+        pos_pct = round(100.0 * pos_d / max(1, n_d), 1)
+
+        # Evaluate each method on this dataset
+        dm_halp = evaluate_detection_metrics(y_d, halp_scores[mask], fixed_threshold=th_halp)
+        dm_viser = evaluate_detection_metrics(y_d, viser_scores[mask], fixed_threshold=th_viser)
+        dm_refind = evaluate_detection_metrics(y_d, refind_scores[mask], fixed_threshold=th_refind)
+        dm_xmca = evaluate_detection_metrics(y_d, xmca_probs[mask], fixed_threshold=th_xmca)
+
+        dataset_rows.append({"dataset": d_name.upper(), "method": "HALP-Adapted (EACL '26)", "paradigm": "Pre-Gen Probing", "n_samples": n_d, "pos_pct": pos_pct, "auroc": dm_halp["auroc"], "pr_auc": dm_halp["pr_auc"], "f1": dm_halp["f1"], "ece": dm_halp["ece"]})
+        dataset_rows.append({"dataset": d_name.upper(), "method": "VisER (EMNLP '26)", "paradigm": "Visual Evidence", "n_samples": n_d, "pos_pct": pos_pct, "auroc": dm_viser["auroc"], "pr_auc": dm_viser["pr_auc"], "f1": dm_viser["f1"], "ece": dm_viser["ece"]})
+        dataset_rows.append({"dataset": d_name.upper(), "method": "REFIND (SemEval '25)", "paradigm": "Context Sensitivity", "n_samples": n_d, "pos_pct": pos_pct, "auroc": dm_refind["auroc"], "pr_auc": dm_refind["pr_auc"], "f1": dm_refind["f1"], "ece": dm_refind["ece"]})
+        dataset_rows.append({"dataset": d_name.upper(), "method": "XMCA-Net (Ours)", "paradigm": "Multi-Axis Cross-Attention", "n_samples": n_d, "pos_pct": pos_pct, "auroc": dm_xmca["auroc"], "pr_auc": dm_xmca["pr_auc"], "f1": dm_xmca["f1"], "ece": dm_xmca["ece"]})
+
+    breakdown_df = pd.DataFrame(dataset_rows)
+    breakdown_csv = output_dir / f"genuine_dataset_breakdown_{model_name}.csv"
+    breakdown_df.to_csv(breakdown_csv, index=False)
+    print(f"[Saved] {breakdown_csv}")
+
+    # ----------------------------------------------------------------
+    # 6. Save prediction parquet for provenance
     # ----------------------------------------------------------------
     pred_df = pd.DataFrame({
         "sample_id": test_df["sample_id"].values,
@@ -263,15 +335,18 @@ def main():
     print(f"[Saved] {pred_path.name} | SHA-256={sha256_path(pred_path)[:16]}...")
 
     # ----------------------------------------------------------------
-    # 7. Print final paper table
+    # 7. Print final paper tables
     # ----------------------------------------------------------------
     print(f"\n{'='*80}")
     print(f"GENUINE TEST EVALUATION COMPLETE — {model_name} | N={len(test_df)}")
     print(f"{'='*80}")
-    print("\n--- TABLE 1: RESPONSE-LEVEL DETECTION ---")
+    print("\n--- TABLE 1: OVERALL RESPONSE-LEVEL DETECTION ---")
     print(summary_df[["method", "paradigm", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
 
-    return summary_df
+    print("\n--- TABLE 2: PER-DATASET BREAKDOWN (POPE, FAITHSCORE, A-OKVQA, INFOSEEK) ---")
+    print(breakdown_df[["dataset", "method", "n_samples", "pos_pct", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
+
+    return summary_df, breakdown_df
 
 
 if __name__ == "__main__":

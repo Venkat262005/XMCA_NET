@@ -237,9 +237,9 @@ class XMCANetwork(nn.Module):
             dropout=dropout,
         )
 
-        # Multi-scale aggregation: pool CLS + mean of active modality tokens (d_model * 2 = 128)
+        # Multi-scale aggregation: pool CLS + active modality context + vision skip token (d_model * 3)
         self.latent_proj = nn.Sequential(
-            nn.Linear(d_model * 2, hidden_dim),
+            nn.Linear(d_model * 3, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
@@ -269,9 +269,26 @@ class XMCANetwork(nn.Module):
     def forward_representation(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass up to the penultimate diagnostic embedding [batch_size, hidden_dim]."""
         seq, cls_tok = self.encoder(x)
-        # Pool: CLS token concatenated with mean-pooled modality tokens
-        modal_mean = seq[:, 1:, :].mean(dim=1)  # [B, d_model]
-        combined_pool = torch.cat([cls_tok, modal_mean], dim=-1)  # [B, d_model * 2]
+        # Extract missingness indicators
+        m_r = x[:, 10:11]  # [B, 1] (1.0 if non-RAG, 0.0 if RAG active)
+        m_u = x[:, 16:17]  # [B, 1]
+
+        # Active-modality weighted pooling: prevents dummy missingness tokens
+        # from diluting the visual perception stream on non-RAG samples (POPE/FaithScore)
+        w_v = torch.ones_like(m_r)
+        w_r = 1.0 - m_r
+        w_u = 1.0 - m_u
+        w_i = torch.clamp(2.0 - m_r - m_u, 0.0, 1.0)
+        weights = torch.stack([w_v, w_r, w_u, w_i], dim=1)  # [B, 4, 1]
+
+        modal_tokens = seq[:, 1:, :]  # [B, 4, d_model]
+        active_modal_mean = (modal_tokens * weights).sum(dim=1) / (weights.sum(dim=1) + 1e-8)  # [B, d_model]
+
+        # Vision skip token: preserves pure visual grounding representation
+        vision_token = seq[:, 1, :]  # [B, d_model]
+
+        # Multi-scale fusion: [CLS, Active Modality Context, Vision Grounding Skip]
+        combined_pool = torch.cat([cls_tok, active_modal_mean, vision_token], dim=-1)  # [B, d_model * 3]
         return self.latent_proj(combined_pool)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

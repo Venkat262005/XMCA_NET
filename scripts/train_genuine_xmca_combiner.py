@@ -138,10 +138,12 @@ def main():
     # Instantiate and train genuine combiner
     combiner = XMCADetectionCombiner(input_dim=20, hidden_dim=128, device=device)
 
-    print(f"\n[Training] XMCANetwork for {args.epochs} epochs...")
+    print(f"\n[Training] XMCANetwork for {args.epochs} epochs with validation tracking...")
     combiner.fit(
         training_vectors=train_vecs,
         labels=train_labels,
+        val_vectors=val_vecs,
+        val_labels=val_labels,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,

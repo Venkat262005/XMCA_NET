@@ -86,12 +86,17 @@ class XMCADetectionCombiner:
         self,
         training_vectors: List[DiagnosticFeatureVector],
         labels: List[int],
-        epochs: int = 50,
+        val_vectors: Optional[List[DiagnosticFeatureVector]] = None,
+        val_labels: Optional[List[int]] = None,
+        epochs: int = 60,
         batch_size: int = 32,
         lr: float = 1e-3,
         weight_decay: float = 1e-2,
     ):
         """Train XMCA dense neural network on validation partition samples with dataset balancing."""
+        import copy
+        from sklearn.metrics import roc_auc_score
+
         if not training_vectors or len(training_vectors) != len(labels):
             raise ValueError("Training vectors and labels must be non-empty and of equal length.")
 
@@ -117,12 +122,23 @@ class XMCADetectionCombiner:
         )
         loader = DataLoader(dataset, batch_size=min(batch_size, len(dataset)), sampler=sampler)
 
+        # Validation tensors if available
+        X_val_norm = None
+        y_val_np = None
+        if val_vectors is not None and val_labels is not None and len(val_vectors) > 0:
+            X_val_raw = np.stack([v.to_feature_list() for v in val_vectors], axis=0)
+            X_val_norm = torch.tensor(self._normalize_features(X_val_raw, fit=False), dtype=torch.float32, device=self.device)
+            y_val_np = np.array(val_labels, dtype=int)
+
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
+        best_val_auroc = -1.0
+        best_state = None
+
         self.model.train()
-        for _ in range(epochs):
+        for epoch in range(epochs):
             for batch_x, batch_y in loader:
                 batch_x = batch_x.to(self.device)
                 batch_y = batch_y.to(self.device)
@@ -133,6 +149,24 @@ class XMCADetectionCombiner:
                 loss.backward()
                 optimizer.step()
             scheduler.step()
+
+            # Track validation AUROC and checkpoint peak model weights
+            if X_val_norm is not None and y_val_np is not None:
+                self.model.eval()
+                with torch.no_grad():
+                    val_logits = self.model(X_val_norm).cpu().numpy()
+                try:
+                    v_auroc = roc_auc_score(y_val_np, val_logits)
+                    if v_auroc > best_val_auroc:
+                        best_val_auroc = v_auroc
+                        best_state = copy.deepcopy(self.model.state_dict())
+                except Exception:
+                    pass
+                self.model.train()
+
+        # Restore peak validation checkpoint if captured
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
 
         self.model.eval()
         self.is_fitted = True
@@ -157,6 +191,13 @@ class XMCADetectionCombiner:
 
         y_t = torch.tensor(y, dtype=torch.float32, device=self.device)
         self.scaler.calibrate(val_logits, y_t)
+
+        # Optimize validation decision threshold to maximize F1 on validation partition
+        with torch.no_grad():
+            scaled_val = self.scaler(val_logits)
+            val_probs = torch.sigmoid(scaled_val).cpu().numpy()
+        from scripts.evaluate_detection import select_optimal_f1_threshold
+        self.decision_threshold = float(select_optimal_f1_threshold(val_probs, y))
 
     def set_decision_threshold(self, threshold: float):
         """Set universal calibrated decision threshold."""

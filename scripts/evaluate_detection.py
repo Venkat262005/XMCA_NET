@@ -95,9 +95,10 @@ def evaluate_detection_metrics(
     specificity = float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
 
     # 4. Calibration & probabilistic loss
-    # Normalize scores to [0, 1] range for ECE and Brier if raw logits
+    # Normalize scores to [0, 1] range for ECE and Brier if raw logits (clipped to avoid exp overflow)
     if np.min(scores) < 0.0 or np.max(scores) > 1.0:
-        probs = 1.0 / (1.0 + np.exp(-scores))
+        clipped_scores = np.clip(scores, -50.0, 50.0)
+        probs = 1.0 / (1.0 + np.exp(-clipped_scores))
     else:
         probs = scores
 

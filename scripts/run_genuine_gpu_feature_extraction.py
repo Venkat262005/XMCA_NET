@@ -94,6 +94,93 @@ NON_RAG_DATASETS = {"pope", "faithscore"}
 
 
 # ---------------------------------------------------------------------------
+# Multi-VLM Loading and Input Preparation (LLaVA, Qwen2-VL, InternVL2)
+# ---------------------------------------------------------------------------
+
+def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
+    """Load model and processor/tokenizer for any of the 3 supported VLMs."""
+    hf_id = cfg["hf_id"]
+    if "qwen" in model_name:
+        from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+        processor = AutoProcessor.from_pretrained(hf_id, min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28)
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            hf_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+    elif "internvl" in model_name:
+        from transformers import AutoModel, AutoTokenizer
+        processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=False)
+        model = AutoModel.from_pretrained(
+            hf_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+    else:  # llava
+        from transformers import AutoProcessor, AutoModelForVision2Seq
+        processor = AutoProcessor.from_pretrained(hf_id, trust_remote_code=True)
+        model = AutoModelForVision2Seq.from_pretrained(
+            hf_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+    model.eval()
+    return model, processor
+
+
+def prepare_vlm_forward_inputs(
+    model_name: str,
+    processor,
+    image: Image.Image,
+    q_text: str,
+    context: Optional[str],
+    cfg: Dict[str, Any],
+    device: str,
+) -> Dict[str, Any]:
+    """Format prompt and preprocess image appropriately for each VLM architecture."""
+    if context:
+        full_text = f"Reference: {context}\nQuestion: {q_text}"
+    else:
+        full_text = q_text
+
+    if "qwen" in model_name:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": full_text},
+                ],
+            }
+        ]
+        text_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
+        return {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+    elif "internvl" in model_name:
+        from src.generation.adapters.internvl import build_transform
+        transform = build_transform(input_size=cfg.get("image_size", 448))
+        pixel_values = transform(image).unsqueeze(0).to(device, dtype=torch.bfloat16)
+        prompt = f"<image>\n{full_text}"
+        tokens = processor(prompt, return_tensors="pt")
+        out = {
+            "input_ids": tokens["input_ids"].to(device),
+            "pixel_values": pixel_values,
+        }
+        if "attention_mask" in tokens:
+            out["attention_mask"] = tokens["attention_mask"].to(device)
+        return out
+
+    else:  # llava
+        prompt = cfg["prompt_template"].format(question=full_text)
+        inputs = processor(text=prompt, images=image, return_tensors="pt")
+        return {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+
+# ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
 
@@ -279,10 +366,9 @@ def extract_features_for_split(
         try:
             image = load_image_safely(img_id, d_id, image_size)
             blank = blank_canvas(image_size)
-            prompt = cfg["prompt_template"].format(question=q_text)
 
-            inputs = processor(text=prompt, images=image, return_tensors="pt").to(device)
-            blank_inputs = processor(text=prompt, images=blank, return_tensors="pt").to(device)
+            inputs = prepare_vlm_forward_inputs(model_name, processor, image, q_text, context=None, cfg=cfg, device=device)
+            blank_inputs = prepare_vlm_forward_inputs(model_name, processor, blank, q_text, context=None, cfg=cfg, device=device)
 
             with torch.no_grad():
                 # --- Primary forward pass (image-conditioned) ---
@@ -357,10 +443,9 @@ def extract_features_for_split(
                 retrieved_context = " ".join(top_passages[:2])[:512]
 
                 # CSR: forward pass WITH retrieved context
-                ctx_prompt = cfg["prompt_template"].format(
-                    question=f"Reference: {retrieved_context}\nQuestion: {q_text}"
+                ctx_inputs = prepare_vlm_forward_inputs(
+                    model_name, processor, image, q_text, context=retrieved_context, cfg=cfg, device=device
                 )
-                ctx_inputs = processor(text=ctx_prompt, images=image, return_tensors="pt").to(device)
                 with torch.no_grad():
                     ctx_outputs = model(**ctx_inputs)
                     ctx_logits = ctx_outputs.logits[0, -1].float()
@@ -511,17 +596,9 @@ def main():
         passages = []
 
     # Load VLM on GPU
-    print(f"\n[Loading] {cfg['hf_id']} → {device}...")
+    print(f"\n[Loading] {cfg['hf_id']} ({model_name}) → {device}...")
     if device == "cuda":
-        from transformers import AutoProcessor, AutoModelForVision2Seq
-        processor = AutoProcessor.from_pretrained(cfg["hf_id"], trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(
-            cfg["hf_id"],
-            torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        model.eval()
+        model, processor = load_vlm_on_device(model_name, cfg, device)
         if torch.cuda.is_available():
             alloc_mb = torch.cuda.memory_allocated() / 1024**2
             print(f"[GPU] Model loaded. VRAM allocated: {alloc_mb:.1f} MB")
