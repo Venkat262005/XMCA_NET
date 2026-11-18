@@ -1,0 +1,106 @@
+flowchart TD
+    %% ==========================================
+    %% SECTION 1: INPUTS
+    %% ==========================================
+    subgraph S1 ["1. Inputs & Multimodal Context"]
+        Img["Input Image (I)"]
+        Q["User Query / Question (Q)"]
+        Corpus["Authentic Knowledge Corpus (C)<br/>(128,223 Wikipedia / Wikidata Passages)"]
+        VLM["Frozen Target VLM<br/>(LLaVA-1.5 / Qwen2-VL / InternVL2)"]
+    end
+
+    %% ==========================================
+    %% SECTION 2: GPU FORWARD PASSES & RETRIEVAL
+    %% ==========================================
+    subgraph S2 ["2. GPU Diagnostic Probing (Feature Extraction)"]
+        Pass1["Pass A: Image Forward Pass<br/>Model(I, Q) → Logits & Attentions"]
+        Pass2["Pass B: Blank Canvas Prior<br/>Model(Blank, Q) → Blank Logits"]
+        Retriever["Pass C: TF-IDF Knowledge Retrieval<br/>Retrieve Top-k Passages for Q"]
+        Pass3["Pass D: Context-Conditioned Pass<br/>Model(I, Q + Context) → Context Logits"]
+    end
+
+    Img & Q --> Pass1
+    Q --> Pass2
+    Q & Corpus --> Retriever
+    Retriever --> Pass3
+    VLM -.-> Pass1 & Pass2 & Pass3
+
+    %% ==========================================
+    %% SECTION 3: TRI-AXIS COMPILATION (20 DIMS)
+    %% ==========================================
+    subgraph S3 ["3. Tri-Axis Diagnostic Feature Compilation (20 Dimensions)"]
+        SP["Visual Perception Axis (S_P) [5 dims]<br/>• sp_score (Logit Delta)<br/>• visual_support_ratio<br/>• visual_contradiction_ratio<br/>• visual_coverage (Attention heads)<br/>• grounding_uncertainty (Entropy)"]
+        SR["Knowledge Retrieval Axis (S_R) [6 dims]<br/>• sr_score (Context Sensitivity CSR)<br/>• top_relevance_score<br/>• mean_relevance_score<br/>• score_margin<br/>• evidence_coverage<br/>• m_r (Missingness indicator)"]
+        SU["Evidence Utilization Axis (S_U) [6 dims]<br/>• su_score (Entailment − Contradiction)<br/>• entailment_ratio<br/>• contradiction_ratio<br/>• omission_ratio<br/>• unsupported_claim_ratio<br/>• m_u (Missingness indicator)"]
+        Inter["Interaction Terms [3 dims]<br/>• total_claims<br/>• sp_x_sr<br/>• sp_x_su"]
+    end
+
+    Pass1 & Pass2 --> SP
+    Pass1 & Retriever & Pass3 --> SR
+    Pass1 & Pass3 --> SU
+    SP & SR & SU --> Inter
+
+    %% ==========================================
+    %% SECTION 4: XMCA-NET NEURAL COMBINER
+    %% ==========================================
+    subgraph S4 ["4. XMCA-Net Combiner Architecture"]
+        Norm["Z-Score Normalization (Fitted on dev_train)"]
+        Gating["Active-Modality Gating<br/>(Zeros dummy RAG tokens on POPE/FaithScore)"]
+        Skip["Direct Visual Skip Connection (d_model × 3)"]
+        Trans["Multi-Head Cross-Attention Transformer<br/>(2 Layers, 4 Attention Heads, d=128)"]
+        Pool["Modality Pooling + Latent Projection"]
+        Latent["128-Dimensional Joint Diagnostic Embedding (z)"]
+    end
+
+    SP & SR & SU & Inter --> Norm
+    Norm --> Gating & Skip
+    Gating --> Trans
+    Trans & Skip --> Pool
+    Pool --> Latent
+
+    %% ==========================================
+    %% SECTION 5: OUTPUT 1 (DETECTION HEAD)
+    %% ==========================================
+    subgraph S5 ["5. OUTPUT 1: Response-Level Detection Head"]
+        DetProj["Linear Projection: z → 1 logit"]
+        TempScale["Post-Hoc Temperature Scaler<br/>(Learned T = 1.1472 on dev_val)"]
+        Sigmoid["Sigmoid Activation"]
+        P_Hall["Calibrated Hallucination Probability:<br/>P(Hallucination) ∈ [0.0, 1.0]"]
+        Threshold{"Is P ≥ Threshold (τ = 0.8687)?<br/>(Selected on dev_val to maximize F1)"}
+        Faithful["0: Faithful Response<br/>(Reliable to present to user)"]
+        Hallucinated["1: Hallucination Detected<br/>(Factual error detected)"]
+    end
+
+    Latent --> DetProj
+    DetProj --> TempScale
+    TempScale --> Sigmoid
+    Sigmoid --> P_Hall
+    P_Hall --> Threshold
+    Threshold -->|No| Faithful
+    Threshold -->|Yes| Hallucinated
+
+    %% ==========================================
+    %% SECTION 6: OUTPUT 2 (ATTRIBUTION HEAD)
+    %% ==========================================
+    subgraph S6 ["6. OUTPUT 2: Root-Cause Attribution Head"]
+        AttrNet["Multi-Class Neural Network<br/>Input: [z (128-D) + raw_x (20-D)] → 3 logits"]
+        Softmax["Softmax Layer"]
+        Probs["Cause Probabilities:<br/>[P_Perception, P_Retrieval, P_Utilization]"]
+        Entropy{"Is Shannon Entropy H > 0.85?<br/>(High diagnostic confusion)"}
+        Diffuse["Unattributed / Diffuse Error<br/>(Complex multi-stage reasoning failure)"]
+        Argmax["Neural argmax(P_P, P_R, P_U)"]
+        CauseP["Perception Failure (S_P)<br/>(Model hallucinated due to visual misperception)"]
+        CauseR["Retrieval Failure (S_R)<br/>(Retriever failed to find fact in corpus)"]
+        CauseU["Utilization Failure (S_U)<br/>(Fact was retrieved, but model ignored it)"]
+    end
+
+    Hallucinated -->|Triggered on Detected Error| AttrNet
+    Latent -.-> AttrNet
+    AttrNet --> Softmax
+    Softmax --> Probs
+    Probs --> Entropy
+    Entropy -->|Yes| Diffuse
+    Entropy -->|No| Argmax
+    Argmax --> CauseP
+    Argmax --> CauseR
+    Argmax --> CauseU

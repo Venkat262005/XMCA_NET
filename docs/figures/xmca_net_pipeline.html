@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>XMCA-Net End-to-End Pipeline Architecture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+      max-width: 900px;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 26px;
+      color: #38bdf8;
+      letter-spacing: -0.5px;
+    }
+    p {
+      margin: 0;
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: #1e293b;
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    button {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: #0369a1;
+      transform: translateY(-1px);
+    }
+    button.secondary {
+      background: #334155;
+      color: #f1f5f9;
+    }
+    button.secondary:hover {
+      background: #475569;
+    }
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      background: #10b981;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #diagram-container {
+      width: 100%;
+      max-width: 1280px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+    }
+    .mermaid {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+  <!-- Mermaid.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      flowchart: {
+        useMaxWidth: true,
+        htmlLabels: true,
+        curve: 'basis'
+      }
+    });
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.style.opacity = '1';
+      setTimeout(() => { toast.style.opacity = '0'; }, 2200);
+    }
+
+    function copyMermaidCode() {
+      const code = document.getElementById('raw-mermaid-code').innerText.trim();
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('✓ Mermaid code copied to clipboard!');
+      }).catch(err => {
+        alert('Failed to copy: ' + err);
+      });
+    }
+
+    function downloadSVG() {
+      const svg = document.querySelector('.mermaid svg');
+      if (!svg) {
+        alert('Diagram not rendered yet. Please wait a second.');
+        return;
+      }
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'xmca_net_pipeline_architecture.svg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast('✓ SVG downloaded successfully!');
+    }
+
+    function downloadPNG() {
+      const svg = document.querySelector('.mermaid svg');
+      if (!svg) {
+        alert('Diagram not rendered yet. Please wait a second.');
+        return;
+      }
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      const bbox = svg.getBoundingClientRect();
+      const scale = 2; // High-res 2x
+      canvas.width = (bbox.width || 1200) * scale;
+      canvas.height = (bbox.height || 1800) * scale;
+
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = function() {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        
+        const pngUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = pngUrl;
+        link.download = 'xmca_net_pipeline_architecture.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('✓ High-Res PNG downloaded successfully!');
+      };
+      img.src = url;
+    }
+  </script>
+</head>
+<body>
+
+  <header>
+    <h1>XMCA-Net: End-to-End Pipeline Architecture</h1>
+    <p>Multi-Axis Cross-Attention Consistency Attribution Network for Multimodal Hallucination Detection &amp; Diagnosis</p>
+  </header>
+
+  <div class="toolbar">
+    <button onclick="downloadSVG()">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+      Download as SVG (Vector)
+    </button>
+    <button onclick="downloadPNG()">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/><path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z"/></svg>
+      Download as PNG (Image)
+    </button>
+    <button class="secondary" onclick="copyMermaidCode()">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
+      Copy Mermaid Code
+    </button>
+  </div>
+
+  <div id="diagram-container">
+    <div class="mermaid" id="rendered-mermaid">
+flowchart TD
+    subgraph S1 ["1. Inputs & Multimodal Context"]
+        Img["Input Image (I)"]
+        Q["User Query / Question (Q)"]
+        Corpus["Authentic Knowledge Corpus (C)<br/>(128,223 Wikipedia / Wikidata Passages)"]
+        VLM["Frozen Target VLM<br/>(LLaVA-1.5 / Qwen2-VL / InternVL2)"]
+    end
+
+    subgraph S2 ["2. GPU Diagnostic Probing (Feature Extraction)"]
+        Pass1["Pass A: Image Forward Pass<br/>Model(I, Q) → Logits & Attentions"]
+        Pass2["Pass B: Blank Canvas Prior<br/>Model(Blank, Q) → Blank Logits"]
+        Retriever["Pass C: TF-IDF Knowledge Retrieval<br/>Retrieve Top-k Passages for Q"]
+        Pass3["Pass D: Context-Conditioned Pass<br/>Model(I, Q + Context) → Context Logits"]
+    end
+
+    Img & Q --> Pass1
+    Q --> Pass2
+    Q & Corpus --> Retriever
+    Retriever --> Pass3
+    VLM -.-> Pass1 & Pass2 & Pass3
+
+    subgraph S3 ["3. Tri-Axis Diagnostic Feature Compilation (20 Dimensions)"]
+        SP["Visual Perception Axis (S_P) [5 dims]<br/>• sp_score (Logit Delta)<br/>• visual_support_ratio<br/>• visual_contradiction_ratio<br/>• visual_coverage (Attention heads)<br/>• grounding_uncertainty (Entropy)"]
+        SR["Knowledge Retrieval Axis (S_R) [6 dims]<br/>• sr_score (Context Sensitivity CSR)<br/>• top_relevance_score<br/>• mean_relevance_score<br/>• score_margin<br/>• evidence_coverage<br/>• m_r (Missingness indicator)"]
+        SU["Evidence Utilization Axis (S_U) [6 dims]<br/>• su_score (Entailment − Contradiction)<br/>• entailment_ratio<br/>• contradiction_ratio<br/>• omission_ratio<br/>• unsupported_claim_ratio<br/>• m_u (Missingness indicator)"]
+        Inter["Interaction Terms [3 dims]<br/>• total_claims<br/>• sp_x_sr<br/>• sp_x_su"]
+    end
+
+    Pass1 & Pass2 --> SP
+    Pass1 & Retriever & Pass3 --> SR
+    Pass1 & Pass3 --> SU
+    SP & SR & SU --> Inter
+
+    subgraph S4 ["4. XMCA-Net Combiner Architecture"]
+        Norm["Z-Score Normalization (Fitted on dev_train)"]
+        Gating["Active-Modality Gating<br/>(Zeros dummy RAG tokens on POPE/FaithScore)"]
+        Skip["Direct Visual Skip Connection (d_model × 3)"]
+        Trans["Multi-Head Cross-Attention Transformer<br/>(2 Layers, 4 Attention Heads, d=128)"]
+        Pool["Modality Pooling + Latent Projection"]
+        Latent["128-Dimensional Joint Diagnostic Embedding (z)"]
+    end
+
+    SP & SR & SU & Inter --> Norm
+    Norm --> Gating & Skip
+    Gating --> Trans
+    Trans & Skip --> Pool
+    Pool --> Latent
+
+    subgraph S5 ["5. OUTPUT 1: Response-Level Detection Head"]
+        DetProj["Linear Projection: z → 1 logit"]
+        TempScale["Post-Hoc Temperature Scaler<br/>(Learned T = 1.1472 on dev_val)"]
+        Sigmoid["Sigmoid Activation"]
+        P_Hall["Calibrated Hallucination Probability:<br/>P(Hallucination) ∈ [0.0, 1.0]"]
+        Threshold{"Is P ≥ Threshold (τ = 0.8687)?<br/>(Selected on dev_val to maximize F1)"}
+        Faithful["0: Faithful Response<br/>(Reliable to present to user)"]
+        Hallucinated["1: Hallucination Detected<br/>(Factual error detected)"]
+    end
+
+    Latent --> DetProj
+    DetProj --> TempScale
+    TempScale --> Sigmoid
+    Sigmoid --> P_Hall
+    P_Hall --> Threshold
+    Threshold -->|No| Faithful
+    Threshold -->|Yes| Hallucinated
+
+    subgraph S6 ["6. OUTPUT 2: Root-Cause Attribution Head"]
+        AttrNet["Multi-Class Neural Network<br/>Input: [z (128-D) + raw_x (20-D)] → 3 logits"]
+        Softmax["Softmax Layer"]
+        Probs["Cause Probabilities:<br/>[P_Perception, P_Retrieval, P_Utilization]"]
+        Entropy{"Is Shannon Entropy H > 0.85?<br/>(High diagnostic confusion)"}
+        Diffuse["Unattributed / Diffuse Error<br/>(Complex multi-stage reasoning failure)"]
+        Argmax["Neural argmax(P_P, P_R, P_U)"]
+        CauseP["Perception Failure (S_P)<br/>(Model hallucinated due to visual misperception)"]
+        CauseR["Retrieval Failure (S_R)<br/>(Retriever failed to find fact in corpus)"]
+        CauseU["Utilization Failure (S_U)<br/>(Fact was retrieved, but model ignored it)"]
+    end
+
+    Hallucinated -->|Triggered on Detected Error| AttrNet
+    Latent -.-> AttrNet
+    AttrNet --> Softmax
+    Softmax --> Probs
+    Probs --> Entropy
+    Entropy -->|Yes| Diffuse
+    Entropy -->|No| Argmax
+    Argmax --> CauseP
+    Argmax --> CauseR
+    Argmax --> CauseU
+    </div>
+  </div>
+
+  <pre id="raw-mermaid-code" style="display: none;">
+flowchart TD
+    subgraph S1 ["1. Inputs & Multimodal Context"]
+        Img["Input Image (I)"]
+        Q["User Query / Question (Q)"]
+        Corpus["Authentic Knowledge Corpus (C)<br/>(128,223 Wikipedia / Wikidata Passages)"]
+        VLM["Frozen Target VLM<br/>(LLaVA-1.5 / Qwen2-VL / InternVL2)"]
+    end
+
+    subgraph S2 ["2. GPU Diagnostic Probing (Feature Extraction)"]
+        Pass1["Pass A: Image Forward Pass<br/>Model(I, Q) → Logits & Attentions"]
+        Pass2["Pass B: Blank Canvas Prior<br/>Model(Blank, Q) → Blank Logits"]
+        Retriever["Pass C: TF-IDF Knowledge Retrieval<br/>Retrieve Top-k Passages for Q"]
+        Pass3["Pass D: Context-Conditioned Pass<br/>Model(I, Q + Context) → Context Logits"]
+    end
+
+    Img & Q --> Pass1
+    Q --> Pass2
+    Q & Corpus --> Retriever
+    Retriever --> Pass3
+    VLM -.-> Pass1 & Pass2 & Pass3
+
+    subgraph S3 ["3. Tri-Axis Diagnostic Feature Compilation (20 Dimensions)"]
+        SP["Visual Perception Axis (S_P) [5 dims]<br/>• sp_score (Logit Delta)<br/>• visual_support_ratio<br/>• visual_contradiction_ratio<br/>• visual_coverage (Attention heads)<br/>• grounding_uncertainty (Entropy)"]
+        SR["Knowledge Retrieval Axis (S_R) [6 dims]<br/>• sr_score (Context Sensitivity CSR)<br/>• top_relevance_score<br/>• mean_relevance_score<br/>• score_margin<br/>• evidence_coverage<br/>• m_r (Missingness indicator)"]
+        SU["Evidence Utilization Axis (S_U) [6 dims]<br/>• su_score (Entailment − Contradiction)<br/>• entailment_ratio<br/>• contradiction_ratio<br/>• omission_ratio<br/>• unsupported_claim_ratio<br/>• m_u (Missingness indicator)"]
+        Inter["Interaction Terms [3 dims]<br/>• total_claims<br/>• sp_x_sr<br/>• sp_x_su"]
+    end
+
+    Pass1 & Pass2 --> SP
+    Pass1 & Retriever & Pass3 --> SR
+    Pass1 & Pass3 --> SU
+    SP & SR & SU --> Inter
+
+    subgraph S4 ["4. XMCA-Net Combiner Architecture"]
+        Norm["Z-Score Normalization (Fitted on dev_train)"]
+        Gating["Active-Modality Gating<br/>(Zeros dummy RAG tokens on POPE/FaithScore)"]
+        Skip["Direct Visual Skip Connection (d_model × 3)"]
+        Trans["Multi-Head Cross-Attention Transformer<br/>(2 Layers, 4 Attention Heads, d=128)"]
+        Pool["Modality Pooling + Latent Projection"]
+        Latent["128-Dimensional Joint Diagnostic Embedding (z)"]
+    end
+
+    SP & SR & SU & Inter --> Norm
+    Norm --> Gating & Skip
+    Gating --> Trans
+    Trans & Skip --> Pool
+    Pool --> Latent
+
+    subgraph S5 ["5. OUTPUT 1: Response-Level Detection Head"]
+        DetProj["Linear Projection: z → 1 logit"]
+        TempScale["Post-Hoc Temperature Scaler<br/>(Learned T = 1.1472 on dev_val)"]
+        Sigmoid["Sigmoid Activation"]
+        P_Hall["Calibrated Hallucination Probability:<br/>P(Hallucination) ∈ [0.0, 1.0]"]
+        Threshold{"Is P ≥ Threshold (τ = 0.8687)?<br/>(Selected on dev_val to maximize F1)"}
+        Faithful["0: Faithful Response<br/>(Reliable to present to user)"]
+        Hallucinated["1: Hallucination Detected<br/>(Factual error detected)"]
+    end
+
+    Latent --> DetProj
+    DetProj --> TempScale
+    TempScale --> Sigmoid
+    Sigmoid --> P_Hall
+    P_Hall --> Threshold
+    Threshold -->|No| Faithful
+    Threshold -->|Yes| Hallucinated
+
+    subgraph S6 ["6. OUTPUT 2: Root-Cause Attribution Head"]
+        AttrNet["Multi-Class Neural Network<br/>Input: [z (128-D) + raw_x (20-D)] → 3 logits"]
+        Softmax["Softmax Layer"]
+        Probs["Cause Probabilities:<br/>[P_Perception, P_Retrieval, P_Utilization]"]
+        Entropy{"Is Shannon Entropy H > 0.85?<br/>(High diagnostic confusion)"}
+        Diffuse["Unattributed / Diffuse Error<br/>(Complex multi-stage reasoning failure)"]
+        Argmax["Neural argmax(P_P, P_R, P_U)"]
+        CauseP["Perception Failure (S_P)<br/>(Model hallucinated due to visual misperception)"]
+        CauseR["Retrieval Failure (S_R)<br/>(Retriever failed to find fact in corpus)"]
+        CauseU["Utilization Failure (S_U)<br/>(Fact was retrieved, but model ignored it)"]
+    end
+
+    Hallucinated -->|Triggered on Detected Error| AttrNet
+    Latent -.-> AttrNet
+    AttrNet --> Softmax
+    Softmax --> Probs
+    Probs --> Entropy
+    Entropy -->|Yes| Diffuse
+    Entropy -->|No| Argmax
+    Argmax --> CauseP
+    Argmax --> CauseR
+    Argmax --> CauseU
+  </pre>
+
+  <div id="toast"></div>
+
+</body>
+</html>
