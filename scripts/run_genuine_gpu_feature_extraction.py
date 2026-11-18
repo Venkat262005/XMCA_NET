@@ -170,16 +170,19 @@ def prepare_vlm_forward_inputs(
         full_text = q_text
 
     if "qwen" in model_name:
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": full_text},
-                ],
-            }
-        ]
-        text_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        try:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": full_text},
+                    ],
+                }
+            ]
+            text_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        except Exception:
+            text_prompt = f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{full_text}<|im_end|>\n<|im_start|>assistant\n"
         inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
         return {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
 

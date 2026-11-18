@@ -359,8 +359,9 @@ for m in MODELS:
     p = Path(f"results/genuine/genuine_test_summary_{m}.csv")
     if p.exists():
         df = pd.read_csv(p)
-        df.insert(0, "model", model_display.get(m, m))
-        summary_frames.append(df)
+        df["model"] = model_display.get(m, m)
+        cols = ["model"] + [c for c in df.columns if c != "model"]
+        summary_frames.append(df[cols])
 
 if summary_frames:
     master_table1_df = pd.concat(summary_frames, ignore_index=True)
@@ -381,8 +382,9 @@ for m in MODELS:
     p = Path(f"results/genuine/genuine_specialized_tracks_{m}.csv")
     if p.exists():
         df = pd.read_csv(p)
-        df.insert(0, "model", model_display.get(m, m))
-        track_frames.append(df)
+        df["model"] = model_display.get(m, m)
+        cols = ["model"] + [c for c in df.columns if c != "model"]
+        track_frames.append(df[cols])
 
 if track_frames:
     master_table2a_df = pd.concat(track_frames, ignore_index=True)
@@ -402,8 +404,9 @@ for m in MODELS:
     p = Path(f"results/genuine/genuine_dataset_breakdown_{m}.csv")
     if p.exists():
         df = pd.read_csv(p)
-        df.insert(0, "model", model_display.get(m, m))
-        breakdown_frames.append(df)
+        df["model"] = model_display.get(m, m)
+        cols = ["model"] + [c for c in df.columns if c != "model"]
+        breakdown_frames.append(df[cols])
 
 if breakdown_frames:
     master_table2b_df = pd.concat(breakdown_frames, ignore_index=True)
@@ -422,8 +425,9 @@ for m in MODELS:
     p = Path(f"results/genuine/genuine_attribution_breakdown_{m}.csv")
     if p.exists():
         df = pd.read_csv(p)
-        df.insert(0, "model", model_display.get(m, m))
-        attr_frames.append(df)
+        df["model"] = model_display.get(m, m)
+        cols = ["model"] + [c for c in df.columns if c != "model"]
+        attr_frames.append(df[cols])
 
 if attr_frames:
     master_table3_df = pd.concat(attr_frames, ignore_index=True)
