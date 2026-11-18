@@ -433,17 +433,15 @@ def main():
                     comb_pred = CombinerPrediction(
                         sample_id=vec.sample_id,
                         hallucination_probability=float(prob),
-                        calibrated_probability=float(prob),
                         predicted_label=1,
-                        decision_threshold=float(th_xmca),
-                        uncertainty=0.0,
+                        threshold_applied=float(th_xmca),
                         raw_score=0.0,
                         temperature=1.0,
-                        sp_score=vec.sp_score,
-                        sr_score=vec.sr_score,
-                        su_score=vec.su_score,
-                        m_r=vec.m_r,
-                        m_u=vec.m_u,
+                        sp_score=float(vec.sp_score),
+                        sr_score=float(vec.sr_score),
+                        su_score=float(vec.su_score),
+                        m_r=float(vec.m_r),
+                        m_u=float(vec.m_u),
                     )
                     attr = attribution_head.attribute_cause(vec, comb_pred, combiner=combiner)
                     if attr.attributed_cause == "perception":
