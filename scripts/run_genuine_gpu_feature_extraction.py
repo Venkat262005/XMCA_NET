@@ -39,9 +39,11 @@ import os
 import sys
 import gc
 import time
+import json
 import argparse
 import hashlib
 from pathlib import Path
+from collections import Counter
 from typing import Optional, Dict, Any, List, Tuple
 
 import numpy as np
@@ -330,8 +332,17 @@ def extract_features_for_split(
     tfidf_matrix,
     passages: List[str],
     device: str,
+    aok_meta: Optional[Dict] = None,
 ) -> pd.DataFrame:
     """Extract genuine tri-axis features for all rows in split_df. Returns a DataFrame."""
+
+    if aok_meta is None:
+        aok_path = REPO_ROOT / "data/raw/aokvqa_v1p0_val.json"
+        if aok_path.exists():
+            with open(aok_path) as f:
+                aok_meta = {item["question_id"]: item for item in json.load(f)}
+        else:
+            aok_meta = {}
 
     image_size = cfg["image_size"]
     num_layers = cfg["num_layers"]
@@ -349,15 +360,27 @@ def extract_features_for_split(
         img_id = str(row.original_image_id)
         sample_id = str(getattr(row, "original_sample_id", getattr(row, "sample_id", f"row_{idx}")))
 
-        # Ground truth label
+        # Ground truth and root-cause label resolution
         gt = gt_map.get(sample_id, {})
+        cause_label = None
         if d_id == "pope":
             gt_label = 1 if gt.get("pope_target_answer", "yes") == "no" else 0
+            cause_label = 0 if gt_label == 1 else None
         elif d_id == "faithscore":
             gt_label = int(gt.get("binary_label", 0))
-        elif d_id in ["a_okvqa", "infoseek"]:
-            accepted = gt.get("accepted_answers", [])
-            gt_label = 0 if len(accepted) > 0 else 1
+            cause_label = 0 if gt_label == 1 else None
+        elif d_id == "a_okvqa":
+            item = aok_meta.get(sample_id, {})
+            da = item.get("direct_answers", [])
+            top_cnt = Counter(da).most_common(1)[0][1] if da else 10
+            diff = item.get("difficult_direct_answer", False)
+            gt_label = 1 if (top_cnt < 5 or diff) else 0
+            cause_label = 2 if gt_label == 1 else None
+        elif d_id == "infoseek":
+            accepted = [str(a).lower() for a in gt.get("accepted_answers", []) if len(str(a)) >= 2]
+            # Will be refined below after retrieval pass
+            gt_label = 0
+            cause_label = None
         else:
             gt_label = 0
 
@@ -459,6 +482,11 @@ def extract_features_for_split(
                 sr_score = float(log_p_ctx / (log_p_no + 1e-8))
                 m_r = 0.0
 
+                if d_id == "infoseek":
+                    gold_found = any(a in retrieved_context.lower() for a in accepted) if accepted else False
+                    gt_label = 0 if gold_found else 1
+                    cause_label = 1 if gt_label == 1 else None
+
             # ----------------------------------------------------------------
             # S_U — Evidence Utilization Axis
             # ----------------------------------------------------------------
@@ -489,6 +517,7 @@ def extract_features_for_split(
                 "split": split_name,
                 "model_name": model_name,
                 "ground_truth_label": gt_label,
+                "cause_label": cause_label,
                 # S_P
                 "sp_score": round(sp_score, 4),
                 "visual_support_ratio": round(visual_support_ratio, 4),
@@ -525,6 +554,7 @@ def extract_features_for_split(
                 "split": split_name,
                 "model_name": model_name,
                 "ground_truth_label": gt_label,
+                "cause_label": cause_label,
                 "sp_score": 0.0, "visual_support_ratio": 0.0, "visual_contradiction_ratio": 0.0,
                 "visual_coverage": 0.0, "grounding_uncertainty": 0.0,
                 "sr_score": 0.0, "top_relevance_score": 0.0, "mean_relevance_score": 0.0,
@@ -585,6 +615,11 @@ def main():
 
     # Ground truth map
     gt_map = build_authentic_ground_truth_map()
+    aok_path = REPO_ROOT / "data/raw/aokvqa_v1p0_val.json"
+    aok_meta = {}
+    if aok_path.exists():
+        with open(aok_path) as f:
+            aok_meta = {item["question_id"]: item for item in json.load(f)}
 
     # TF-IDF corpus
     corpus_path = REPO_ROOT / args.corpus_path
@@ -632,6 +667,7 @@ def main():
             tfidf_matrix=tfidf_matrix,
             passages=passages,
             device=device,
+            aok_meta=aok_meta,
         )
 
         elapsed = time.time() - t0

@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.features.extractor import DiagnosticFeatureVector
-from src.combiner.combiner import XMCADetectionCombiner
+from src.combiner.combiner import XMCADetectionCombiner, XMCAAttributionHead, CombinerPrediction
 from src.baselines.halp_probe import HALPProbeDetector
 from src.combiner.model import XMCANetwork, TemperatureScaler
 from scripts.evaluate_detection import evaluate_detection_metrics, select_optimal_f1_threshold
@@ -61,12 +61,14 @@ def load_test_features(features_dir: Path, model_name: str) -> pd.DataFrame:
 
 
 def df_row_to_vector(row) -> DiagnosticFeatureVector:
+    c_val = getattr(row, "cause_label", None) if hasattr(row, "cause_label") else (row.get("cause_label", None) if isinstance(row, dict) or hasattr(row, "get") else None)
+    cause_label = int(c_val) if (pd.notna(c_val) and c_val is not None) else None
     return DiagnosticFeatureVector(
         sample_id=str(row["sample_id"]),
         dataset_id=str(row["dataset_id"]),
         model_name=str(row["model_name"]),
         ground_truth_label=int(row["ground_truth_label"]),
-        cause_label=None,
+        cause_label=cause_label,
         sp_score=float(row["sp_score"]),
         visual_support_ratio=float(row["visual_support_ratio"]),
         visual_contradiction_ratio=float(row["visual_contradiction_ratio"]),
@@ -119,6 +121,18 @@ def load_halp_probe(ckpt_path: Path, device: str) -> HALPProbeDetector:
     probe.is_fitted = True
     probe.to(device)
     return probe
+
+
+def load_attribution_head(ckpt_path: Path, device: str) -> Optional[XMCAAttributionHead]:
+    if not ckpt_path.exists():
+        print(f"[Attribution] Checkpoint not found: {ckpt_path.name}")
+        return None
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+    head = XMCAAttributionHead(hidden_dim=ckpt.get("hidden_dim", 128), device=device)
+    head.network.load_state_dict(ckpt["network_state"])
+    head.is_trained = True
+    print(f"[Loaded] XMCA attribution head | SHA-256={sha256_path(ckpt_path)[:16]}...")
+    return head
 
 
 def main():
@@ -200,6 +214,8 @@ def main():
     # ----------------------------------------------------------------
     xmca_ckpt = combiner_dir / f"xmca_{model_name}_combiner.pt"
     combiner = load_xmca_combiner(xmca_ckpt, device)
+    attr_ckpt = combiner_dir / f"xmca_{model_name}_attribution_head.pt"
+    attribution_head = load_attribution_head(attr_ckpt, device)
 
     combiner.model.eval()
     X_test_np = np.stack([v.to_feature_list() for v in test_vecs], axis=0).astype(np.float32)
@@ -335,7 +351,82 @@ def main():
     print(f"[Saved] {pred_path.name} | SHA-256={sha256_path(pred_path)[:16]}...")
 
     # ----------------------------------------------------------------
-    # 7. Print final paper tables
+    # 7. Compile Paper Table 3 — Root-Cause Attribution Breakdown (Output 2)
+    # ----------------------------------------------------------------
+    attr_df = None
+    if attribution_head is not None:
+        pred_labels = (xmca_probs >= th_xmca).astype(int)
+        attr_rows = []
+        for d_name in target_datasets + ["overall"]:
+            if d_name == "overall":
+                mask = np.ones(len(test_df), dtype=bool)
+                d_title = "OVERALL"
+            else:
+                mask = (test_df["dataset_id"].str.lower() == d_name).values
+                d_title = d_name.upper()
+
+            n_samples = int(np.sum(mask))
+            if n_samples == 0:
+                continue
+
+            sub_vecs = [test_vecs[i] for i in range(len(test_vecs)) if mask[i]]
+            sub_probs = xmca_probs[mask]
+            sub_preds = pred_labels[mask]
+
+            n_hallucinations = int(np.sum(sub_preds == 1))
+            p_count = 0
+            r_count = 0
+            u_count = 0
+            unattr_count = 0
+
+            for vec, prob, pred in zip(sub_vecs, sub_probs, sub_preds):
+                if pred == 1:
+                    comb_pred = CombinerPrediction(
+                        sample_id=vec.sample_id,
+                        hallucination_probability=float(prob),
+                        calibrated_probability=float(prob),
+                        predicted_label=1,
+                        decision_threshold=float(th_xmca),
+                        uncertainty=0.0,
+                        raw_score=0.0,
+                        temperature=1.0,
+                        sp_score=vec.sp_score,
+                        sr_score=vec.sr_score,
+                        su_score=vec.su_score,
+                        m_r=vec.m_r,
+                        m_u=vec.m_u,
+                    )
+                    attr = attribution_head.attribute_cause(vec, comb_pred, combiner=combiner)
+                    if attr.attributed_cause == "perception":
+                        p_count += 1
+                    elif attr.attributed_cause == "retrieval":
+                        r_count += 1
+                    elif attr.attributed_cause == "utilization":
+                        u_count += 1
+                    else:
+                        unattr_count += 1
+
+            p_pct = round(100.0 * p_count / max(1, n_hallucinations), 1) if n_hallucinations > 0 else 0.0
+            r_pct = round(100.0 * r_count / max(1, n_hallucinations), 1) if n_hallucinations > 0 else 0.0
+            u_pct = round(100.0 * u_count / max(1, n_hallucinations), 1) if n_hallucinations > 0 else 0.0
+            unattr_pct = round(100.0 * unattr_count / max(1, n_hallucinations), 1) if n_hallucinations > 0 else 0.0
+
+            attr_rows.append({
+                "dataset": d_title,
+                "detected_hallucinations": n_hallucinations,
+                "perception": f"{p_pct}% ({p_count})",
+                "retrieval": f"{r_pct}% ({r_count})",
+                "utilization": f"{u_pct}% ({u_count})",
+                "unattributed": f"{unattr_pct}% ({unattr_count})",
+            })
+
+        attr_df = pd.DataFrame(attr_rows)
+        attr_csv = output_dir / f"genuine_attribution_breakdown_{model_name}.csv"
+        attr_df.to_csv(attr_csv, index=False)
+        print(f"[Saved] {attr_csv}")
+
+    # ----------------------------------------------------------------
+    # 8. Print final paper tables
     # ----------------------------------------------------------------
     print(f"\n{'='*80}")
     print(f"GENUINE TEST EVALUATION COMPLETE — {model_name} | N={len(test_df)}")
@@ -345,6 +436,10 @@ def main():
 
     print("\n--- TABLE 2: PER-DATASET BREAKDOWN (POPE, FAITHSCORE, A-OKVQA, INFOSEEK) ---")
     print(breakdown_df[["dataset", "method", "n_samples", "pos_pct", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
+
+    if attr_df is not None:
+        print("\n--- TABLE 3: ROOT-CAUSE ATTRIBUTION BREAKDOWN (OUTPUT 2: PERCEPTION vs RETRIEVAL vs UTILIZATION) ---")
+        print(attr_df.to_string(index=False))
 
     return summary_df, breakdown_df
 

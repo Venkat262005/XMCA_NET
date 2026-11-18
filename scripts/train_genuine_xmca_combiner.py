@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.features.extractor import DiagnosticFeatureVector
-from src.combiner.combiner import XMCADetectionCombiner
+from src.combiner.combiner import XMCADetectionCombiner, XMCAAttributionHead
 
 
 def sha256_path(path: Path) -> str:
@@ -44,12 +44,14 @@ def df_to_diagnostic_vectors(df: pd.DataFrame) -> tuple:
 
     for _, row in df.iterrows():
         try:
+            c_val = row.get("cause_label", None)
+            cause_label = int(c_val) if (pd.notna(c_val) and c_val is not None) else None
             vec = DiagnosticFeatureVector(
                 sample_id=str(row["sample_id"]),
                 dataset_id=str(row["dataset_id"]),
                 model_name=str(row["model_name"]),
                 ground_truth_label=int(row["ground_truth_label"]),
-                cause_label=None,
+                cause_label=cause_label,
                 sp_score=float(row["sp_score"]),
                 visual_support_ratio=float(row["visual_support_ratio"]),
                 visual_contradiction_ratio=float(row["visual_contradiction_ratio"]),
@@ -189,7 +191,39 @@ def main():
     }, ckpt_path)
     sha = sha256_path(ckpt_path)
     print(f"\n[Saved] {ckpt_path.name} | SHA-256={sha}")
-    print(f"\n[Done] Genuine XMCANetwork combiner trained and saved.")
+
+    # Train genuine deep attribution head (Output 2)
+    print(f"\n[Training] XMCAAttributionHead for root-cause diagnosis...")
+    attribution_head = XMCAAttributionHead(hidden_dim=128, device=device)
+    train_cause_vecs = [v for v in train_vecs if v.cause_label is not None and v.ground_truth_label == 1]
+    train_cause_lbls = [v.cause_label for v in train_cause_vecs]
+
+    if len(train_cause_vecs) > 0:
+        print(f"  Training on {len(train_cause_vecs)} verified failure vectors across causes: "
+              f"P={train_cause_lbls.count(0)}, R={train_cause_lbls.count(1)}, U={train_cause_lbls.count(2)}")
+        attribution_head.fit(
+            combiner=combiner,
+            vectors=train_cause_vecs,
+            cause_labels=train_cause_lbls,
+            epochs=40,
+            lr=1e-3,
+        )
+        attr_ckpt = output_dir / f"xmca_{model_name}_attribution_head.pt"
+        torch.save({
+            "model_name": model_name,
+            "network_state": attribution_head.network.state_dict(),
+            "hidden_dim": 128,
+            "num_causes": 3,
+            "train_samples": len(train_cause_vecs),
+            "genuine_extraction": True,
+            "note": "Trained on genuine cause annotations. Softmax over [perception, retrieval, utilization].",
+        }, attr_ckpt)
+        sha_attr = sha256_path(attr_ckpt)
+        print(f"  [Saved] {attr_ckpt.name} | SHA-256={sha_attr}")
+    else:
+        print("  [Warn] No cause labels found in dev_train — run update_genuine_parquet_labels.py first.")
+
+    print(f"\n[Done] Genuine XMCANetwork combiner and attribution head trained and saved.")
 
 
 if __name__ == "__main__":
