@@ -263,7 +263,12 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
         combined.to_parquet(all_feat_path, index=False)
     subprocess.run(["python", "scripts/run_component_ablation.py", "--features_file", str(all_feat_path), "--model", model_name, "--tier", "1000", "--epochs", "40"], check=True)
     
-    print(f"\\n[COMPLETED] Pipeline finished successfully for {model_name}!")
+    # Explicit GPU memory cleanup between model executions
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    print(f"\\n[COMPLETED] Pipeline finished successfully for {model_name}! GPU VRAM cleared.")
 """)
 
     # =========================================================================
@@ -272,7 +277,7 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     add_md("""<a id="section-4"></a>
 ## 4. Pipeline Execution: Model 1 — LLaVA-1.5-7B
 Standard CLIP-ViT-L/14 + Vicuna-7B MLP-projection architecture.
-*(Note: If parquets are already present on disk, this step executes training, evaluation, and ablation in ~3 minutes).*""")
+*(Note: On a fresh run, GPU feature extraction executes across all 3,174 samples in ~87 minutes, followed by probe training, combiner training, evaluation, and ablation in ~4 minutes).*""")
 
     add_code("""# Execute full pipeline for LLaVA-1.5-7B
 execute_vlm_pipeline("llava_1.5_7b", skip_extraction_if_present=True)

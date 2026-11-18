@@ -114,9 +114,10 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
     elif "internvl" in model_name:
         from transformers import AutoModel, AutoTokenizer
         processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=False)
+        dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
         model = AutoModel.from_pretrained(
             hf_id,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map="auto",
             trust_remote_code=True,
         )
@@ -165,7 +166,8 @@ def prepare_vlm_forward_inputs(
     elif "internvl" in model_name:
         from src.generation.adapters.internvl import build_transform
         transform = build_transform(input_size=cfg.get("image_size", 448))
-        pixel_values = transform(image).unsqueeze(0).to(device, dtype=torch.bfloat16)
+        dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+        pixel_values = transform(image).unsqueeze(0).to(device, dtype=dtype)
         prompt = f"<image>\n{full_text}"
         tokens = processor(prompt, return_tensors="pt")
         out = {
