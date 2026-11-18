@@ -300,7 +300,60 @@ def main():
     print(f"\n[Saved] {summary_csv}")
 
     # ----------------------------------------------------------------
-    # 5. Compile Paper Table 2 — Per-Dataset Breakdown (POPE, FaithScore, A-OKVQA, InfoSeek)
+    # 5A. Compile Paper Table 2A — 3-Track Specialized Diagnostic Benchmark
+    # ----------------------------------------------------------------
+    track_rows = []
+
+    # Track 1: Visual Perception (S_P) — POPE + FaithScore
+    mask_vis = test_df["dataset_id"].str.lower().isin(["pope", "faithscore"]).values
+    if np.sum(mask_vis) > 0:
+        y_vis = y_test[mask_vis]
+        n_vis = int(np.sum(mask_vis))
+        pos_vis = round(100.0 * np.sum(y_vis == 1) / max(1, n_vis), 1)
+        tm_halp = evaluate_detection_metrics(y_vis, halp_scores[mask_vis], fixed_threshold=th_halp)
+        tm_viser = evaluate_detection_metrics(y_vis, viser_scores[mask_vis], fixed_threshold=th_viser)
+        tm_xmca = evaluate_detection_metrics(y_vis, xmca_probs[mask_vis], fixed_threshold=th_xmca)
+
+        track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "HALP-Adapted (EACL '26)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_halp["auroc"], "pr_auc": tm_halp["pr_auc"], "f1": tm_halp["f1"], "ece": tm_halp["ece"]})
+        track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "VisER (EMNLP '26)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_viser["auroc"], "pr_auc": tm_viser["pr_auc"], "f1": tm_viser["f1"], "ece": tm_viser["ece"]})
+        track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "REFIND (SemEval '25)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
+        track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "XMCA-Net (Ours)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_xmca["auroc"], "pr_auc": tm_xmca["pr_auc"], "f1": tm_xmca["f1"], "ece": tm_xmca["ece"]})
+
+    # Track 2: Knowledge Retrieval (S_R) — InfoSeek
+    mask_ret = (test_df["dataset_id"].str.lower() == "infoseek").values
+    if np.sum(mask_ret) > 0:
+        y_ret = y_test[mask_ret]
+        n_ret = int(np.sum(mask_ret))
+        pos_ret = round(100.0 * np.sum(y_ret == 1) / max(1, n_ret), 1)
+        tm_refind = evaluate_detection_metrics(y_ret, refind_scores[mask_ret], fixed_threshold=th_refind)
+        tm_xmca_ret = evaluate_detection_metrics(y_ret, xmca_probs[mask_ret], fixed_threshold=th_xmca)
+
+        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "VisER (EMNLP '26)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
+        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "HALP-Adapted (EACL '26)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
+        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "REFIND (SemEval '25)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": tm_refind["auroc"], "pr_auc": tm_refind["pr_auc"], "f1": tm_refind["f1"], "ece": tm_refind["ece"]})
+        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "XMCA-Net (Ours)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": tm_xmca_ret["auroc"], "pr_auc": tm_xmca_ret["pr_auc"], "f1": tm_xmca_ret["f1"], "ece": tm_xmca_ret["ece"]})
+
+    # Track 3: Evidence Utilization (S_U) — A-OKVQA
+    mask_utl = (test_df["dataset_id"].str.lower() == "a_okvqa").values
+    if np.sum(mask_utl) > 0:
+        y_utl = y_test[mask_utl]
+        n_utl = int(np.sum(mask_utl))
+        pos_utl = round(100.0 * np.sum(y_utl == 1) / max(1, n_utl), 1)
+        tm_refind_utl = evaluate_detection_metrics(y_utl, refind_scores[mask_utl], fixed_threshold=th_refind)
+        tm_xmca_utl = evaluate_detection_metrics(y_utl, xmca_probs[mask_utl], fixed_threshold=th_xmca)
+
+        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "VisER (EMNLP '26)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
+        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "HALP-Adapted (EACL '26)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
+        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "REFIND (SemEval '25)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": tm_refind_utl["auroc"], "pr_auc": tm_refind_utl["pr_auc"], "f1": tm_refind_utl["f1"], "ece": tm_refind_utl["ece"]})
+        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "XMCA-Net (Ours)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": tm_xmca_utl["auroc"], "pr_auc": tm_xmca_utl["pr_auc"], "f1": tm_xmca_utl["f1"], "ece": tm_xmca_utl["ece"]})
+
+    track_df = pd.DataFrame(track_rows)
+    track_csv = output_dir / f"genuine_specialized_tracks_{model_name}.csv"
+    track_df.to_csv(track_csv, index=False)
+    print(f"[Saved] {track_csv}")
+
+    # ----------------------------------------------------------------
+    # 5B. Compile Paper Table 2B — Per-Dataset Breakdown (POPE, FaithScore, A-OKVQA, InfoSeek)
     # ----------------------------------------------------------------
     dataset_rows = []
     target_datasets = ["pope", "faithscore", "a_okvqa", "infoseek"]
@@ -431,17 +484,25 @@ def main():
     print(f"\n{'='*80}")
     print(f"GENUINE TEST EVALUATION COMPLETE — {model_name} | N={len(test_df)}")
     print(f"{'='*80}")
-    print("\n--- TABLE 1: OVERALL RESPONSE-LEVEL DETECTION ---")
+    print("\n--- TABLE 1: OVERALL GENERALIST DETECTION BENCHMARK (N=1,073) ---")
     print(summary_df[["method", "paradigm", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
 
-    print("\n--- TABLE 2: PER-DATASET BREAKDOWN (POPE, FAITHSCORE, A-OKVQA, INFOSEEK) ---")
+    print("\n--- TABLE 2A: 3-TRACK SPECIALIZED DIAGNOSTIC BENCHMARK ---")
+    print("Track 1: Visual Perception (POPE + FaithScore) | Track 2: Knowledge Retrieval (InfoSeek) | Track 3: Evidence Utilization (A-OKVQA)")
+    print(track_df[["track", "method", "n_samples", "pos_pct", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
+
+    print("\n--- TABLE 2B: PER-DATASET BREAKDOWN (POPE, FAITHSCORE, A-OKVQA, INFOSEEK) ---")
     print(breakdown_df[["dataset", "method", "n_samples", "pos_pct", "auroc", "pr_auc", "f1", "ece"]].to_string(index=False))
 
     if attr_df is not None:
         print("\n--- TABLE 3: ROOT-CAUSE ATTRIBUTION BREAKDOWN (OUTPUT 2: PERCEPTION vs RETRIEVAL vs UTILIZATION) ---")
         print(attr_df.to_string(index=False))
 
-    return summary_df, breakdown_df
+    print("\n--- TABLE 4: DECODING-TIME GENERATIVE MITIGATION (DECODING BENCHMARK) ---")
+    print("Decoding Interventions (Greedy vs Beam Search vs OPERA vs Re-Align vs XMCA-Guided Mitigation):")
+    print("Refer to: results/mitigation/ or run `python scripts/run_generative_mitigation.py`.")
+
+    return summary_df, track_df, breakdown_df
 
 
 if __name__ == "__main__":
