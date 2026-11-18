@@ -28,6 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.run_consistency_pipeline import build_authentic_ground_truth_map
+from scripts.run_genuine_gpu_feature_extraction import build_tfidf_retriever, retrieve_passages
 
 
 def sha256_path(path: Path) -> str:
@@ -66,13 +67,21 @@ def main():
     gt_map = build_authentic_ground_truth_map()
     aok_meta = load_aokvqa_metadata()
 
-    # Load cohort manifest to map sample_id -> original_sample_id if needed
+    # Load authentic corpus and build TF-IDF retriever for InfoSeek gold verification
+    corpus_path = REPO_ROOT / "artifacts/corpora/authentic_knowledge_corpus.parquet"
+    vectorizer, tfidf_matrix, passages = build_tfidf_retriever(corpus_path)
+    if vectorizer is not None:
+        print(f"[Corpus] TF-IDF index loaded ({len(passages)} passages).")
+    else:
+        print("[Corpus] Corpus not found — InfoSeek will use CSR metric fallback.")
+
+    # Load cohort manifest to map sample_id -> question
     cohort_path = REPO_ROOT / "artifacts/manifests/cohort_manifest.parquet"
-    cohort_map = {}
+    cohort_q_map = {}
     if cohort_path.exists():
         c_df = pd.read_parquet(cohort_path)
         for r in c_df.itertuples():
-            cohort_map[str(r.original_sample_id)] = r
+            cohort_q_map[str(r.original_sample_id)] = r.question
 
     splits = ["dev_train", "dev_val", "test"]
 
@@ -116,12 +125,18 @@ def main():
                 c = 2 if y == 1 else None
 
             elif d_id == "infoseek":
-                # InfoSeek: Retrieval failure based on genuine TF-IDF retrieval metrics
-                # Low evidence coverage (<0.25) or low relevance score (<0.15) indicates
-                # the knowledge retrieval engine failed to find supporting facts for the query.
-                ev_cov = getattr(row, "evidence_coverage", 0.0)
-                top_rel = getattr(row, "top_relevance_score", 0.0)
-                y = 1 if (ev_cov < 0.25 or top_rel < 0.15) else 0
+                # InfoSeek: Verify whether gold entity was successfully retrieved in top-k passages
+                accepted = [str(a).lower() for a in gt.get("accepted_answers", []) if len(str(a)) >= 2]
+                q_text = cohort_q_map.get(s_id, getattr(row, "question", ""))
+                if vectorizer is not None and accepted and q_text:
+                    top_p, _ = retrieve_passages(q_text, vectorizer, tfidf_matrix, passages, top_k=5)
+                    text = " ".join(top_p).lower()
+                    gold_found = any(a in text for a in accepted)
+                    y = 0 if gold_found else 1
+                else:
+                    # Fallback based on CSR score: if sr_score <= 0.05, context failed to improve confidence
+                    sr_sc = getattr(row, "sr_score", 0.0)
+                    y = 1 if sr_sc <= 0.05 else 0
                 c = 1 if y == 1 else None  # Knowledge Retrieval Failure
 
             else:
