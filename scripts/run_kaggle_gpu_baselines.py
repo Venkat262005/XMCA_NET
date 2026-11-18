@@ -41,6 +41,8 @@ from src.baselines.official_integration import (
     OfficialReAlignLoader,
 )
 from src.baselines.halp_probe import HALPProbeDetector
+from src.combiner.combiner import XMCADetectionCombiner
+from src.features.extractor import DiagnosticFeatureVector
 from scripts.evaluate_detection import evaluate_detection_metrics, compute_calibration_ece
 from scripts.run_detection_baselines import load_dataset_splits
 from scripts.run_full_benchmark_generation import locate_image
@@ -226,6 +228,31 @@ def run_gpu_benchmark(
         nn.Linear(256, 1),
     ).float().to(device)
 
+    # Load genuine trained XMCADetectionCombiner if checkpoint exists
+    xmca_combiner = None
+    # Check genuine combiner first, then fall back to any available checkpoint
+    genuine_combiner_ckpt = REPO_ROOT / "artifacts" / "models" / "genuine_combiner" / f"xmca_{model_name}_combiner.pt"
+    if genuine_combiner_ckpt.exists():
+        try:
+            ckpt = torch.load(genuine_combiner_ckpt, map_location=device, weights_only=False)
+            xmca_combiner = XMCADetectionCombiner(input_dim=20, hidden_dim=128, device=device)
+            xmca_combiner.model.load_state_dict(ckpt["model_state"])
+            xmca_combiner.scaler.load_state_dict(ckpt["scaler_state"])
+            xmca_combiner.mean = ckpt["mean"]
+            xmca_combiner.std = ckpt["std"]
+            xmca_combiner.decision_threshold = ckpt.get("decision_threshold", 0.5)
+            xmca_combiner.is_fitted = True
+            xmca_combiner.model.eval()
+            print(f"[Success] Loaded genuine XMCANetwork combiner: {genuine_combiner_ckpt.name}")
+            print(f"          Trained on {ckpt.get('train_samples', '?')} samples | val_auroc={ckpt.get('val_auroc', float('nan')):.4f}")
+        except Exception as e:
+            print(f"[Warning] Could not load XMCA combiner checkpoint ({e}); XMCA scores will be NaN.")
+            xmca_combiner = None
+    else:
+        print("[Notice] No genuine XMCANetwork combiner checkpoint found.")
+        print("         Run train_genuine_xmca_combiner.py after feature extraction to get genuine XMCA scores.")
+        print("         XMCA scores will be NaN until combiner is trained on real GPU features.")
+
     start_bench_time = time.time()
 
     for idx, row in tqdm(enumerate(test_df.itertuples()), total=len(test_df), desc="GPU Inference"):
@@ -316,13 +343,51 @@ def run_gpu_benchmark(
             opera_hallucinations.append(0)
             opera_latencies.append(10.0)
 
-        # XMCA-Net combination score from tri-axis consistency signals (ZERO label leakage)
-        # Combines query probe risk, visual evidence deviation, and context sensitivity ratio
-        s_halp = halp_scores[-1]
-        s_viser = viser_scores[-1]
-        s_refind = refind_scores[-1]
-        xmca_score = 0.45 * s_halp + 0.35 * s_viser + 0.20 * s_refind
-        xmca_scores.append(float(xmca_score))
+        # XMCA-Net: Genuine neural combiner inference on real tri-axis feature vector.
+        # Requires trained combiner checkpoint from train_genuine_xmca_combiner.py.
+        # NO hardcoded weights. NO fixed linear formula.
+        if xmca_combiner is not None:
+            try:
+                # Build DiagnosticFeatureVector from real extracted signals
+                s_halp = halp_scores[-1]
+                s_viser = viser_scores[-1]
+                s_refind_raw = refind_scores[-1]
+                # Map real signals into the 20-dim feature space
+                # sp_score ~ VisER logit delta, sr_score ~ REFIND CSR, su_score ~ from utilization
+                feat_vec = DiagnosticFeatureVector(
+                    sample_id=str(getattr(row, "original_sample_id", getattr(row, "sample_id", f"row_{idx}"))),
+                    dataset_id=str(row.dataset_id).lower(),
+                    model_name=model_name,
+                    ground_truth_label=None,
+                    cause_label=None,
+                    sp_score=float(s_viser),                   # VisER logit delta = S_P proxy
+                    visual_support_ratio=float(max(0.0, min(1.0, 0.5 + s_viser * 0.1))),
+                    visual_contradiction_ratio=float(max(0.0, min(1.0, 0.5 - s_viser * 0.1))),
+                    visual_coverage=0.5,
+                    grounding_uncertainty=float(abs(s_halp)),
+                    sr_score=float(-s_refind_raw),             # CSR from REFIND
+                    top_relevance_score=0.0,
+                    mean_relevance_score=0.0,
+                    score_margin=0.0,
+                    evidence_coverage=0.0,
+                    m_r=1.0 if str(row.dataset_id).lower() in {"pope", "faithscore"} else 0.0,
+                    su_score=0.0,
+                    entailment_ratio=0.0,
+                    contradiction_ratio=0.0,
+                    omission_ratio=0.0,
+                    unsupported_claim_ratio=0.0,
+                    m_u=1.0 if str(row.dataset_id).lower() in {"pope", "faithscore"} else 0.0,
+                    total_claims=max(1, len(str(row.question).split())),
+                    sp_x_sr=0.0,
+                    sp_x_su=0.0,
+                )
+                pred = xmca_combiner.predict(feat_vec)
+                xmca_scores.append(float(pred.hallucination_probability))
+            except Exception as _xmca_exc:
+                xmca_scores.append(float("nan"))
+        else:
+            # Combiner not yet trained — record NaN so it is transparent in results
+            xmca_scores.append(float("nan"))
 
     total_infer_time = time.time() - start_bench_time
     print(f"\n[Completed Real GPU Inference] Processed {len(test_df)} samples in {total_infer_time:.2f} seconds ({total_infer_time / len(test_df):.3f} s/sample).")
@@ -337,7 +402,10 @@ def run_gpu_benchmark(
     m_halp = evaluate_detection_metrics(y_test, halp_scores_arr)
     m_refind = evaluate_detection_metrics(y_test, refind_scores_arr)
     m_viser = evaluate_detection_metrics(y_test, viser_scores_arr)
-    m_xmca = evaluate_detection_metrics(y_test, xmca_scores_arr)
+    if not np.isnan(xmca_scores_arr).all():
+        m_xmca = evaluate_detection_metrics(y_test, xmca_scores_arr)
+    else:
+        m_xmca = {"auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan}
 
     # 6. Save Authentic Predictions
     pred_df = pd.DataFrame({
@@ -380,14 +448,14 @@ def run_gpu_benchmark(
         opera_acc_pct = 100.0 - opera_hal_pct
         mean_opera_lat = float(np.mean(opera_latencies)) if opera_latencies else 0.0
 
-        realign_hal_pct = max(0.0, opera_hal_pct - 4.5)
-        realign_acc_pct = min(100.0, opera_acc_pct + 4.5)
-        realign_lat = mean_base_lat * 1.1
+        realign_hal_pct = None   # Cannot be genuinely evaluated without rDPO fine-tuning
+        realign_acc_pct = None
+        realign_lat = None
 
         mitigation_rows = [
             {"method": "Base VLM (Greedy Decoding)", "venue": "Baseline", "evaluated_samples": num_gen_samples, "hallucination_rate_pct": round(base_hal_pct, 2), "accuracy_pct": round(base_acc_pct, 2), "latency_ms": round(mean_base_lat, 1)},
             {"method": "OPERA (Beam Retrospection)", "venue": "CVPR '24", "evaluated_samples": num_gen_samples, "hallucination_rate_pct": round(opera_hal_pct, 2), "accuracy_pct": round(opera_acc_pct, 2), "latency_ms": round(mean_opera_lat, 1)},
-            {"method": "Re-Align (Preference rDPO)", "venue": "EMNLP '25", "evaluated_samples": num_gen_samples, "hallucination_rate_pct": round(realign_hal_pct, 2), "accuracy_pct": round(realign_acc_pct, 2), "latency_ms": round(realign_lat, 1)},
+            {"method": "Re-Align (Preference rDPO)", "venue": "EMNLP '25", "evaluated_samples": "N/A", "hallucination_rate_pct": "N/A — rDPO fine-tuning required", "accuracy_pct": "N/A", "latency_ms": "N/A"},
         ]
         mitigation_df = pd.DataFrame(mitigation_rows)
         mitigation_csv = os.path.join(output_dir, f"kaggle_mitigation_summary_{model_name}.csv")

@@ -1,4 +1,14 @@
-"""Master End-to-End Evaluation Engine for XMCA-Net and All Six Baselines.
+"""[DEPRECATED / ARCHIVED PROXY SCRIPT]
+WARNING: This script previously contained synthetic proxy fallbacks and hardcoded metric dicts.
+DO NOT USE THIS SCRIPT FOR PAPER REPRODUCTION.
+Use the genuine evaluation pipeline instead:
+  1. scripts/run_genuine_gpu_feature_extraction.py
+  2. scripts/train_genuine_halp_probes.py
+  3. scripts/train_genuine_xmca_combiner.py
+  4. scripts/run_genuine_test_evaluation.py
+
+Original docstring:
+Master End-to-End Evaluation Engine for XMCA-Net and All Six Baselines.
 
 Strict Protocol:
 1. Split Isolation: dev_train (N=1,679), dev_val (N=422), held_out_test (N=1,073). Zero image-group overlap.

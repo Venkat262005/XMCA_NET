@@ -421,8 +421,8 @@ def generate_table4_latex(dataset_metrics: Dict[str, Any], tier: int) -> str:
 def generate_pure_svg_calibration(output_path: Path, detection: Dict[str, Any]):
     """Generate SVG reliability calibration diagram dynamically from evaluated model telemetry."""
     rep_model = next(iter(detection.values())) if detection else None
-    temp_val = rep_model.get("temperature", 1.42) if rep_model else 1.42
-    ece_val = rep_model.get("ece", 0.0464) if rep_model else 0.0464
+    temp_val = float(rep_model.get("temperature", 1.0)) if rep_model else 1.0
+    ece_val = float(rep_model.get("ece", 0.0)) if rep_model else 0.0
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 480" width="100%" height="100%">
   <style>
@@ -484,24 +484,24 @@ def generate_pure_svg_ablation(output_path: Path, ablation: Dict[str, Any]):
     rep_data = ablation.get(rep_key, {}) if rep_key else {}
 
     configs = [
-        ("S_R_only", "A1_Retrieval_Only", "S_R only", "bar-sr", 0.5120),
-        ("S_U_only", "A2_Utilization_Only", "S_U only", "bar-su", 0.6635),
-        ("S_P_only", "A0_Visual_Only", "S_P only", "bar-sp", 0.7842),
-        ("Pairwise_SR_plus_SU", "A5_Retrieval_plus_Utilization", "S_R + S_U", "bar-pair", 0.6840),
-        ("Pairwise_SP_plus_SR", "A3_Visual_plus_Retrieval", "S_P + S_R", "bar-pair", 0.8150),
-        ("Pairwise_SP_plus_SU", "A4_Visual_plus_Utilization", "S_P + S_U", "bar-pair", 0.8670),
-        ("Full_XMCA_Net", "A6_Full_XMCA", "Full XMCA", "bar-full", 0.9187),
+        ("S_R_only", "A1_Retrieval_Only", "S_R only", "bar-sr"),
+        ("S_U_only", "A2_Utilization_Only", "S_U only", "bar-su"),
+        ("S_P_only", "A0_Visual_Only", "S_P only", "bar-sp"),
+        ("Pairwise_SR_plus_SU", "A5_Retrieval_plus_Utilization", "S_R + S_U", "bar-pair"),
+        ("Pairwise_SP_plus_SR", "A3_Visual_plus_Retrieval", "S_P + S_R", "bar-pair"),
+        ("Pairwise_SP_plus_SU", "A4_Visual_plus_Utilization", "S_P + S_U", "bar-pair"),
+        ("Full_XMCA_Net", "A6_Full_XMCA", "Full XMCA", "bar-full"),
     ]
 
     bars_svg = []
     start_x = 110
     spacing = 85
 
-    for idx, (k1, k2, label, bar_class, fallback_val) in enumerate(configs):
+    for idx, (k1, k2, label, bar_class) in enumerate(configs):
         res = rep_data.get(k1) or rep_data.get(k2) or {}
-        val = float(res.get("auroc", fallback_val))
+        val = float(res.get("auroc", 0.0))
         val_clamped = max(0.40, min(1.00, val))
-        height = ((val_clamped - 0.40) / 0.60) * 300.0
+        height = ((val_clamped - 0.40) / 0.60) * 300.0 if val > 0.0 else 0.0
         y = 370.0 - height
         x = start_x + (idx * spacing)
 
@@ -562,10 +562,10 @@ def generate_pure_svg_attribution(output_path: Path, attribution: Dict[str, Any]
 
     for idx, (m_key, attrs) in enumerate(attribution.items()):
         name = display_names.get(m_key, m_key)
-        p = attrs.get("Perception Failure", 33.3)
-        r = attrs.get("Knowledge Retrieval Failure", 33.3)
-        u = attrs.get("Evidence Utilization Failure", 23.4)
-        un = attrs.get("Unattributed / Reasoning", 10.0)
+        p = float(attrs.get("Perception Failure", 0.0))
+        r = float(attrs.get("Knowledge Retrieval Failure", 0.0))
+        u = float(attrs.get("Evidence Utilization Failure", 0.0))
+        un = float(attrs.get("Unattributed / Reasoning", 0.0))
 
         # 500 px width total (5 px per 1%)
         w_p = p * 5.0
