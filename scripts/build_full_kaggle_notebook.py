@@ -167,7 +167,9 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 manifest_path = Path("artifacts/manifests/cohort_manifest.parquet")
-corpus_path = Path("artifacts/corpus/authentic_knowledge_corpus.parquet")
+corpus_path = Path("artifacts/corpora/authentic_knowledge_corpus.parquet")
+if not corpus_path.exists():
+    corpus_path = Path("artifacts/corpus/authentic_knowledge_corpus.parquet")
 
 assert manifest_path.exists(), f"Cohort manifest not found: {manifest_path}"
 assert corpus_path.exists(), f"Knowledge corpus not found: {corpus_path}"
@@ -366,6 +368,9 @@ Conducts systematic ablations across the 3 diagnostic axes, cross-modal interact
 
     add_code("""# Combine train, val, and test parquets into one complete dataset for ablation partitioning
 all_feat_path = Path(f"artifacts/features/genuine_features_{MODEL_NAME}_all.parquet")
+dev_train_path = Path(f"artifacts/features/genuine_features_{MODEL_NAME}_dev_train.parquet")
+dev_val_path = Path(f"artifacts/features/genuine_features_{MODEL_NAME}_dev_val.parquet")
+test_path = Path(f"artifacts/features/genuine_features_{MODEL_NAME}_test.parquet")
 
 if not all_feat_path.exists():
     print(f"Concatenating all splits into {all_feat_path.name} for ablation...")
