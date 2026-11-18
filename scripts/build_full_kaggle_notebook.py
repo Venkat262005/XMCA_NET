@@ -188,7 +188,11 @@ corpus_df = pd.read_parquet(corpus_path)
 print("=" * 70)
 print(f"[Cohort Manifest] Total Records: {len(manifest_df)} | SHA-256: {sha256_file(manifest_path)[:16]}...")
 print("Distribution by Partition and Benchmark Dataset:")
-print(pd.crosstab(manifest_df['split'], manifest_df['dataset_id'], margins=True))
+split_col = "split" if "split" in manifest_df.columns else ("original_split" if "original_split" in manifest_df.columns else None)
+if split_col:
+    print(pd.crosstab(manifest_df[split_col], manifest_df['dataset_id'], margins=True))
+else:
+    print(manifest_df['dataset_id'].value_counts())
 print("-" * 70)
 print(f"[Knowledge Corpus] Total Passages: {len(corpus_df)} | SHA-256: {sha256_file(corpus_path)[:16]}...")
 print("=" * 70)
@@ -215,12 +219,20 @@ In academic benchmark evaluation, baseline detectors operate under different par
     # HELPER FUNCTION FOR MODEL PIPELINE
     # =========================================================================
     add_code("""# Helper runner function for executing the 7-step pipeline on any VLM backbone
+import sys
+import subprocess
+import gc
+import torch
+import pandas as pd
+from pathlib import Path
+
 def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = True):
     print(f"\\n{'='*80}")
     print(f"STARTING FULL PIPELINE EXECUTION FOR: {model_name}")
     print(f"{'='*80}")
     
     features_dir = Path("artifacts/features")
+    features_dir.mkdir(parents=True, exist_ok=True)
     dev_train = features_dir / f"genuine_features_{model_name}_dev_train.parquet"
     dev_val = features_dir / f"genuine_features_{model_name}_dev_val.parquet"
     test = features_dir / f"genuine_features_{model_name}_test.parquet"
@@ -230,7 +242,7 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     # Step 1 & 2: GPU Feature Extraction (if parquets missing or forced)
     if not features_ready or not skip_extraction_if_present:
         print(f"\\n[Step 1/6] Running genuine GPU feature extraction for {model_name}...")
-        subprocess.run(["python", "scripts/run_genuine_gpu_feature_extraction.py", "--model", model_name, "--split", "all"], check=True)
+        subprocess.run([sys.executable, "scripts/run_genuine_gpu_feature_extraction.py", "--model", model_name, "--split", "all"], check=True)
     else:
         print(f"\\n[Step 1/6] Genuine feature parquets found for {model_name}. Skipping re-extraction.")
         for p in [dev_train, dev_val, test]:
@@ -238,19 +250,19 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
             
     # Step 3: Authentic Label & Cause Resolution
     print(f"\\n[Step 2/6] Updating authentic ground-truth labels and root causes for {model_name}...")
-    subprocess.run(["python", "scripts/update_genuine_parquet_labels.py", "--model", model_name], check=True)
+    subprocess.run([sys.executable, "scripts/update_genuine_parquet_labels.py", "--model", model_name], check=True)
     
     # Step 4: Train Genuine HALP Probes on GPU
     print(f"\\n[Step 3/6] Training 11 genuine HALP MLP probes on GPU for {model_name}...")
-    subprocess.run(["python", "scripts/train_genuine_halp_probes.py", "--model", model_name], check=True)
+    subprocess.run([sys.executable, "scripts/train_genuine_halp_probes.py", "--model", model_name], check=True)
     
     # Step 5: Train XMCA Combiner & Attribution Head on GPU
     print(f"\\n[Step 4/6] Training XMCA Combiner & Neural Attribution Head for {model_name}...")
-    subprocess.run(["python", "scripts/train_genuine_xmca_combiner.py", "--model", model_name], check=True)
+    subprocess.run([sys.executable, "scripts/train_genuine_xmca_combiner.py", "--model", model_name], check=True)
     
     # Step 6: Held-Out Test Evaluation
     print(f"\\n[Step 5/6] Evaluating XMCA-Net and Baselines on held-out test data for {model_name}...")
-    subprocess.run(["python", "scripts/run_genuine_test_evaluation.py", "--model", model_name], check=True)
+    subprocess.run([sys.executable, "scripts/run_genuine_test_evaluation.py", "--model", model_name], check=True)
     
     # Step 7: Multi-Level Component & Architecture Ablation
     print(f"\\n[Step 6/6] Executing 19-config multi-level ablation on GPU for {model_name}...")
@@ -261,10 +273,9 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
         p_test = pd.read_parquet(test)
         combined = pd.concat([p_train, p_val, p_test], ignore_index=True)
         combined.to_parquet(all_feat_path, index=False)
-    subprocess.run(["python", "scripts/run_component_ablation.py", "--features_file", str(all_feat_path), "--model", model_name, "--tier", "1000", "--epochs", "40"], check=True)
+    subprocess.run([sys.executable, "scripts/run_component_ablation.py", "--features_file", str(all_feat_path), "--model", model_name, "--tier", "1000", "--epochs", "40"], check=True)
     
     # Explicit GPU memory cleanup between model executions
-    import gc
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
