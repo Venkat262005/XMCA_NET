@@ -316,7 +316,6 @@ def main():
 
         track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "HALP-Adapted (EACL '26)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_halp["auroc"], "pr_auc": tm_halp["pr_auc"], "f1": tm_halp["f1"], "ece": tm_halp["ece"]})
         track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "VisER (EMNLP '26)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_viser["auroc"], "pr_auc": tm_viser["pr_auc"], "f1": tm_viser["f1"], "ece": tm_viser["ece"]})
-        track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "REFIND (SemEval '25)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
         track_rows.append({"track": "Track 1: Visual Perception (S_P)", "datasets": "POPE + FaithScore", "method": "XMCA-Net (Ours)", "n_samples": n_vis, "pos_pct": pos_vis, "auroc": tm_xmca["auroc"], "pr_auc": tm_xmca["pr_auc"], "f1": tm_xmca["f1"], "ece": tm_xmca["ece"]})
 
     # Track 2: Knowledge Retrieval (S_R) — InfoSeek
@@ -328,8 +327,6 @@ def main():
         tm_refind = evaluate_detection_metrics(y_ret, refind_scores[mask_ret], fixed_threshold=th_refind)
         tm_xmca_ret = evaluate_detection_metrics(y_ret, xmca_probs[mask_ret], fixed_threshold=th_xmca)
 
-        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "VisER (EMNLP '26)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
-        track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "HALP-Adapted (EACL '26)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
         track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "REFIND (SemEval '25)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": tm_refind["auroc"], "pr_auc": tm_refind["pr_auc"], "f1": tm_refind["f1"], "ece": tm_refind["ece"]})
         track_rows.append({"track": "Track 2: Knowledge Retrieval (S_R)", "datasets": "InfoSeek", "method": "XMCA-Net (Ours)", "n_samples": n_ret, "pos_pct": pos_ret, "auroc": tm_xmca_ret["auroc"], "pr_auc": tm_xmca_ret["pr_auc"], "f1": tm_xmca_ret["f1"], "ece": tm_xmca_ret["ece"]})
 
@@ -342,8 +339,6 @@ def main():
         tm_refind_utl = evaluate_detection_metrics(y_utl, refind_scores[mask_utl], fixed_threshold=th_refind)
         tm_xmca_utl = evaluate_detection_metrics(y_utl, xmca_probs[mask_utl], fixed_threshold=th_xmca)
 
-        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "VisER (EMNLP '26)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
-        track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "HALP-Adapted (EACL '26)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": np.nan, "pr_auc": np.nan, "f1": np.nan, "ece": np.nan})
         track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "REFIND (SemEval '25)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": tm_refind_utl["auroc"], "pr_auc": tm_refind_utl["pr_auc"], "f1": tm_refind_utl["f1"], "ece": tm_refind_utl["ece"]})
         track_rows.append({"track": "Track 3: Evidence Utilization (S_U)", "datasets": "A-OKVQA", "method": "XMCA-Net (Ours)", "n_samples": n_utl, "pos_pct": pos_utl, "auroc": tm_xmca_utl["auroc"], "pr_auc": tm_xmca_utl["pr_auc"], "f1": tm_xmca_utl["f1"], "ece": tm_xmca_utl["ece"]})
 
