@@ -173,9 +173,16 @@ def run_gpu_benchmark(
     processor = None
 
     if torch.cuda.is_available():
-        from transformers import AutoProcessor, AutoModelForVision2Seq
+        from transformers import AutoProcessor
+        try:
+            from transformers import LlavaForConditionalGeneration as ModelClass
+        except ImportError:
+            try:
+                from transformers import AutoModelForImageTextToText as ModelClass
+            except ImportError:
+                from transformers import AutoModel as ModelClass
         processor = AutoProcessor.from_pretrained(target_hf_id, trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(
+        model = ModelClass.from_pretrained(
             target_hf_id,
             torch_dtype=torch.float16,
             device_map="auto",

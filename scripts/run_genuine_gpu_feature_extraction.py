@@ -103,9 +103,16 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
     """Load model and processor/tokenizer for any of the 3 supported VLMs."""
     hf_id = cfg["hf_id"]
     if "qwen" in model_name:
-        from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+        from transformers import AutoProcessor
+        try:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        except ImportError:
+            try:
+                from transformers import AutoModelForImageTextToText as ModelClass
+            except ImportError:
+                from transformers import AutoModel as ModelClass
         processor = AutoProcessor.from_pretrained(hf_id, min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28)
-        model = Qwen2VLForConditionalGeneration.from_pretrained(
+        model = ModelClass.from_pretrained(
             hf_id,
             torch_dtype=torch.float16,
             device_map="auto",
@@ -122,9 +129,22 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
             trust_remote_code=True,
         )
     else:  # llava
-        from transformers import AutoProcessor, AutoModelForVision2Seq
+        from transformers import AutoProcessor
+        try:
+            from transformers import LlavaForConditionalGeneration as ModelClass
+        except ImportError:
+            try:
+                from transformers import AutoModelForImageTextToText as ModelClass
+            except ImportError:
+                from transformers import AutoModel as ModelClass
         processor = AutoProcessor.from_pretrained(hf_id, trust_remote_code=True)
-        model = AutoModelForVision2Seq.from_pretrained(
+        if getattr(processor, "patch_size", None) is None:
+            processor.patch_size = 14
+        if hasattr(processor, "image_processor") and getattr(processor.image_processor, "patch_size", None) is None:
+            processor.image_processor.patch_size = 14
+        if getattr(processor, "vision_feature_select_strategy", None) is None:
+            processor.vision_feature_select_strategy = "default"
+        model = ModelClass.from_pretrained(
             hf_id,
             torch_dtype=torch.float16,
             device_map="auto",
