@@ -475,28 +475,34 @@ if attr_frames:
 """)
 
     add_code("""# -----------------------------------------------------------------------------
-# MASTER TABLE 4: DECODING-TIME GENERATIVE MITIGATION BENCHMARK
+# MASTER TABLE 4: EMPIRICAL VLM HALLUCINATION PROFILES & PREDICTION DISTRIBUTIONS
 # -----------------------------------------------------------------------------
-mitigation_data = [
-    {"model": "LLaVA-1.5-7B", "decoding_strategy": "Greedy Decoding (Baseline)", "venue": "Baseline", "hallucination_rate_pct": 46.8, "vqa_acc_pct": 62.4, "latency_ms": 142.0},
-    {"model": "LLaVA-1.5-7B", "decoding_strategy": "Beam Search (k=3)", "venue": "Standard", "hallucination_rate_pct": 44.1, "vqa_acc_pct": 63.8, "latency_ms": 386.0},
-    {"model": "LLaVA-1.5-7B", "decoding_strategy": "OPERA", "venue": "CVPR '24", "hallucination_rate_pct": 35.6, "vqa_acc_pct": 66.1, "latency_ms": 512.0},
-    {"model": "LLaVA-1.5-7B", "decoding_strategy": "Re-Align", "venue": "EMNLP '25", "hallucination_rate_pct": 32.4, "vqa_acc_pct": 67.5, "latency_ms": 210.0},
-    {"model": "LLaVA-1.5-7B", "decoding_strategy": "XMCA-Guided Mitigation (Ours)", "venue": "Ours", "hallucination_rate_pct": 27.8, "vqa_acc_pct": 71.2, "latency_ms": 168.0},
-    {"model": "Qwen2-VL-7B", "decoding_strategy": "Greedy Decoding (Baseline)", "venue": "Baseline", "hallucination_rate_pct": 41.2, "vqa_acc_pct": 68.1, "latency_ms": 185.0},
-    {"model": "Qwen2-VL-7B", "decoding_strategy": "OPERA", "venue": "CVPR '24", "hallucination_rate_pct": 31.5, "vqa_acc_pct": 71.4, "latency_ms": 620.0},
-    {"model": "Qwen2-VL-7B", "decoding_strategy": "XMCA-Guided Mitigation (Ours)", "venue": "Ours", "hallucination_rate_pct": 24.1, "vqa_acc_pct": 76.5, "latency_ms": 215.0},
-    {"model": "InternVL2-2B", "decoding_strategy": "Greedy Decoding (Baseline)", "venue": "Baseline", "hallucination_rate_pct": 49.5, "vqa_acc_pct": 58.7, "latency_ms": 68.0},
-    {"model": "InternVL2-2B", "decoding_strategy": "OPERA", "venue": "CVPR '24", "hallucination_rate_pct": 39.2, "vqa_acc_pct": 62.3, "latency_ms": 240.0},
-    {"model": "InternVL2-2B", "decoding_strategy": "XMCA-Guided Mitigation (Ours)", "venue": "Ours", "hallucination_rate_pct": 31.0, "vqa_acc_pct": 66.8, "latency_ms": 82.0},
-]
-master_table4_df = pd.DataFrame(mitigation_data)
-print("=" * 110)
-print("MASTER TABLE 4: DECODING-TIME GENERATIVE MITIGATION BENCHMARK ACROSS VLMs")
-print("=" * 110)
-print(master_table4_df.to_string(index=False))
-print("=" * 110)
-master_table4_df.to_csv("results/genuine/master_table4_mitigation.csv", index=False)
+vlm_profiles = []
+for m in MODELS:
+    pred_p = Path(f"results/genuine/predictions/genuine_test_predictions_{m}.parquet")
+    if pred_p.exists():
+        df_p = pd.read_parquet(pred_p)
+        y_true = df_p["ground_truth_label"].values.astype(int)
+        s_prob = df_p["xmca_prob"].values
+        vlm_profiles.append({
+            "model": model_display.get(m, m),
+            "test_samples": len(df_p),
+            "empirical_hallucination_rate_pct": round(float(np.mean(y_true) * 100.0), 2),
+            "mean_predicted_confidence": round(float(np.mean(s_prob)), 4),
+            "high_risk_flagged": int(np.sum(s_prob >= 0.7)),
+            "low_risk_passed": int(np.sum(s_prob <= 0.3)),
+        })
+
+if vlm_profiles:
+    master_table4_df = pd.DataFrame(vlm_profiles)
+    print("=" * 110)
+    print("MASTER TABLE 4: EMPIRICAL VLM HALLUCINATION PROFILES & CALIBRATED RISK DISTRIBUTIONS")
+    print("=" * 110)
+    print(master_table4_df.to_string(index=False))
+    print("=" * 110)
+    master_table4_df.to_csv("results/genuine/master_table4_vlm_profiles.csv", index=False)
+else:
+    print("[Notice] Prediction parquets not generated yet. Run evaluation cells above first.")
 """)
 
     add_code("""# -----------------------------------------------------------------------------
@@ -648,7 +654,13 @@ if summary_frames:
     if len(xmca_rows) > 0:
         models_found = xmca_rows["model"].tolist()
         xmca_aurocs = xmca_rows["auroc"].tolist()
-        halp_aurocs = halp_rows["auroc"].tolist() if len(halp_rows) == len(xmca_rows) else [0.5857] * len(models_found)
+        halp_aurocs = []
+        for m in models_found:
+            m_halp = halp_rows[halp_rows["model"] == m]
+            if len(m_halp) > 0 and pd.notna(m_halp["auroc"].values[0]):
+                halp_aurocs.append(float(m_halp["auroc"].values[0]))
+            else:
+                halp_aurocs.append(0.5)
         
         x = np.arange(len(models_found))
         width = 0.35
@@ -911,35 +923,33 @@ else:
 """)
 
     add_code("""# -----------------------------------------------------------------------------
-# DYNAMIC LATEX TABLE 4 & 5: MITIGATION & MULTI-LEVEL ABLATION
+# DYNAMIC LATEX TABLE 4 & 5: VLM PROFILES & MULTI-LEVEL ABLATION
 # -----------------------------------------------------------------------------
 if "master_table4_df" in locals() and not master_table4_df.empty:
     lines = [
         r"\\begin{table}[t]",
         r"\\centering",
         r"\\small",
-        r"\\caption{\\textbf{Decoding-Time Generative Mitigation Benchmark}. Comparison of standard greedy decoding, beam search, OPERA, and Re-Align on generation mitigation.}",
-        r"\\label{tab:table4_mitigation}",
-        r"\\begin{tabular}{llccc}",
+        r"\\caption{\\textbf{Empirical VLM Hallucination Profiles \\& Risk Distributions ($N=1,073$)}. Measured base model error rates and calibrated prediction confidence across evaluated backbones.}",
+        r"\\label{tab:table4_vlm_profiles}",
+        r"\\begin{tabular}{lccccc}",
         r"\\toprule",
-        r"\\textbf{Model} & \\textbf{Decoding Strategy} & \\textbf{Hallucination Rate (\\%)} $\\downarrow$ & \\textbf{VQA Acc (\\%)} $\\uparrow$ & \\textbf{Latency (ms)} $\\downarrow$ \\\\",
+        r"\\textbf{Model} & \\textbf{Samples ($N$)} & \\textbf{Hallucination Rate} & \\textbf{Mean Confidence} & \\textbf{High-Risk Flagged} & \\textbf{Low-Risk Passed} \\\\",
         r"\\midrule",
     ]
     for _, row in master_table4_df.iterrows():
         m_str = str(row.get("model", ""))
-        strat = str(row.get("decoding_strategy", ""))
-        hr = f"{row['hallucination_rate_pct']:.1f}\\%" if pd.notna(row.get("hallucination_rate_pct")) else "---"
-        acc = f"{row['vqa_acc_pct']:.1f}\\%" if pd.notna(row.get("vqa_acc_pct")) else "---"
-        lat = f"{row['latency_ms']:.0f} ms" if pd.notna(row.get("latency_ms")) else "---"
-        if "XMCA" in strat:
-            lines.append(f"{m_str} & \\textbf{{{strat}}} & \\textbf{{{hr}}} & \\textbf{{{acc}}} & \\textbf{{{lat}}} \\\\")
-        else:
-            lines.append(f"{m_str} & {strat} & {hr} & {acc} & {lat} \\\\")
+        ns = str(row.get("test_samples", ""))
+        hr = f"{row['empirical_hallucination_rate_pct']:.2f}\\%" if pd.notna(row.get("empirical_hallucination_rate_pct")) else "---"
+        conf = f"{row['mean_predicted_confidence']:.4f}" if pd.notna(row.get("mean_predicted_confidence")) else "---"
+        hrisk = str(row.get("high_risk_flagged", ""))
+        lrisk = str(row.get("low_risk_passed", ""))
+        lines.append(f"{m_str} & {ns} & {hr} & {conf} & {hrisk} & {lrisk} \\\\")
     lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table}"]
     table4_tex = "\\n".join(lines)
-    with open(latex_dir / "table4_mitigation.tex", "w") as f:
+    with open(latex_dir / "table4_vlm_profiles.tex", "w") as f:
         f.write(table4_tex)
-    print(f"[Exported] {latex_dir / 'table4_mitigation.tex'}")
+    print(f"[Exported] {latex_dir / 'table4_vlm_profiles.tex'}")
 
 if "master_table5_df" in locals() and not master_table5_df.empty:
     lines = [
