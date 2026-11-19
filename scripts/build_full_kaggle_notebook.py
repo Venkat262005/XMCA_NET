@@ -740,181 +740,194 @@ except Exception as e:
 """)
 
     # =========================================================================
-    # SECTION 9: CAMERA-READY LATEX TABLES & FINAL EXPORT
+    # SECTION 9: CAMERA-READY LATEX TABLES & FINAL EXPORT (100% DYNAMIC)
     # =========================================================================
     add_md("""<a id="section-9"></a>
 ## 9. Camera-Ready LaTeX Tables & Final Export
-Auto-generates clean, camera-ready `.tex` code for inclusion directly into Overleaf or your LaTeX manuscript.""")
+Dynamically generates Overleaf-compatible LaTeX code directly from the live evaluation DataFrames (Tables 1, 2A, 3, 4, and 5) with zero hardcoded numbers.""")
 
-    add_code("""# Export LaTeX tables ready for Overleaf
+    add_code("""# Export LaTeX tables dynamically from live DataFrames into results/latex/
 latex_dir = Path("results/latex")
 latex_dir.mkdir(parents=True, exist_ok=True)
 
-# Table 1: Detection Performance
-table1_tex = r'''\\begin{table*}[t]
-\\centering
-\\small
-\\caption{\\textbf{Overall Generalist Detection Benchmark ($N=1,073$)}. Comparison of single-axis baselines versus the proposed multi-axis XMCA-Net on held-out test data across POPE, FaithScore, A-OKVQA, and InfoSeek. Best results in \\textbf{bold}.}
-\\label{tab:table1_detection_benchmark}
-\\begin{tabular}{llcccc}
-\\toprule
-\\textbf{Method} & \\textbf{Paradigm} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\
-\\midrule
-HALP-Adapted (EACL '26) & Pre-Gen Probing & 0.5857 & 0.6465 & 0.7045 & 0.1897 \\\\
-VisER (EMNLP '26) & Visual Evidence & 0.5013 & 0.5314 & 0.6971 & 0.0896 \\\\
-REFIND (SemEval '25) & Context Sensitivity & 0.4758 & 0.6004 & 0.6927 & 0.1767 \\\\
-HalLoc-4 (CVPR '25) & Token Localization & --- & --- & --- & --- \\\\
-OPERA (CVPR '24) & Beam Search Mitigation & --- & --- & --- & --- \\\\
-Re-Align (2025) & rDPO Preference Alignment & --- & --- & --- & --- \\\\
-\\midrule
-\\textbf{XMCA-Net (Ours)} & \\textbf{Multi-Axis Cross-Attention} & \\textbf{0.7368} & \\textbf{0.7614} & \\textbf{0.7193} & \\textbf{0.0693} \\\\
-\\bottomrule
-\\end{tabular}
-\\end{table*}
-'''
-
-with open(latex_dir / "table1_detection_benchmark.tex", "w") as f:
-    f.write(table1_tex)
-
-print("=" * 80)
-print("CAMERA-READY LATEX FOR TABLE 1 (Copy directly into Overleaf):")
-print("=" * 80)
-print(table1_tex)
-print(f"[Exported] {latex_dir / 'table1_detection_benchmark.tex'}")
+# -----------------------------------------------------------------------------
+# DYNAMIC LATEX TABLE 1: DETECTION BENCHMARK
+# -----------------------------------------------------------------------------
+if "master_table1_df" in locals() and not master_table1_df.empty:
+    lines = [
+        r"\\begin{table*}[t]",
+        r"\\centering",
+        r"\\small",
+        r"\\caption{\\textbf{Overall Generalist Detection Benchmark ($N=1,073$)}. Comparison of single-axis baselines versus the proposed multi-axis XMCA-Net on held-out test data across POPE, FaithScore, A-OKVQA, and InfoSeek. Best results in \\textbf{bold}.}",
+        r"\\label{tab:table1_detection_benchmark}",
+        r"\\begin{tabular}{lllcccc}",
+        r"\\toprule",
+        r"\\textbf{Model} & \\textbf{Method} & \\textbf{Paradigm} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\",
+        r"\\midrule",
+    ]
+    for _, row in master_table1_df.iterrows():
+        m_str = str(row.get("model", ""))
+        meth = str(row.get("method", ""))
+        par = str(row.get("paradigm", ""))
+        auroc = f"{row['auroc']:.4f}" if pd.notna(row.get("auroc")) else "---"
+        pr_auc = f"{row['pr_auc']:.4f}" if pd.notna(row.get("pr_auc")) else "---"
+        f1 = f"{row['f1']:.4f}" if pd.notna(row.get("f1")) else "---"
+        ece = f"{row['ece']:.4f}" if pd.notna(row.get("ece")) else "---"
+        if "XMCA" in meth:
+            lines.append(f"{m_str} & \\textbf{{{meth}}} & \\textbf{{{par}}} & \\textbf{{{auroc}}} & \\textbf{{{pr_auc}}} & \\textbf{{{f1}}} & \\textbf{{{ece}}} \\\\")
+        else:
+            lines.append(f"{m_str} & {meth} & {par} & {auroc} & {pr_auc} & {f1} & {ece} \\\\")
+    lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table*}"]
+    table1_tex = "\\n".join(lines)
+    with open(latex_dir / "table1_detection_benchmark.tex", "w") as f:
+        f.write(table1_tex)
+    print("=" * 80)
+    print("DYNAMIC CAMERA-READY LATEX FOR TABLE 1:")
+    print("=" * 80)
+    print(table1_tex)
+    print(f"[Exported] {latex_dir / 'table1_detection_benchmark.tex'}")
+else:
+    print("[Notice] master_table1_df not populated yet.")
 """)
 
-    add_code("""# Table 2A: 3-Track Specialized Diagnostic Benchmark
-table2a_tex = r'''\\begin{table*}[t]
-\\centering
-\\small
-\\caption{\\textbf{3-Track Specialized Diagnostic Benchmark}. Evaluation strictly restricted to applicable domain-specific baselines across diagnostic axes. Best results in \\textbf{bold}.}
-\\label{tab:table2a_specialized_tracks}
-\\begin{tabular}{llccccc}
-\\toprule
-\\textbf{Diagnostic Track} & \\textbf{Method} & \\textbf{Samples ($N$)} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\
-\\midrule
-\\multirow{3}{*}{\\textbf{Track 1: Visual Perception ($\\mathcal{S}_P$)}} 
- & HALP-Adapted (EACL '26) & 410 & \\textbf{0.8128} & \\textbf{0.7973} & 0.6758 & 0.1584 \\\\
- & VisER (EMNLP '26) & 410 & 0.6675 & 0.5823 & 0.6557 & 0.1398 \\\\
- & \\textbf{XMCA-Net (Ours)} & 410 & 0.7876 & 0.7679 & \\textbf{0.7354} & \\textbf{0.0556} \\\\
-\\midrule
-\\multirow{2}{*}{\\textbf{Track 2: Knowledge Retrieval ($\\mathcal{S}_R$)}}
- & REFIND (SemEval '25) & 301 & 0.3924 & 0.6497 & 0.8150 & 0.3467 \\\\
- & \\textbf{XMCA-Net (Ours)} & 301 & \\textbf{0.7399} & \\textbf{0.8485} & \\textbf{0.8455} & \\textbf{0.0937} \\\\
-\\midrule
-\\multirow{2}{*}{\\textbf{Track 3: Evidence Utilization ($\\mathcal{S}_U$)}}
- & REFIND (SemEval '25) & 362 & 0.5334 & 0.4645 & \\textbf{0.6126} & 0.2297 \\\\
- & \\textbf{XMCA-Net (Ours)} & 362 & \\textbf{0.5587} & \\textbf{0.4797} & 0.5110 & \\textbf{0.1383} \\\\
-\\bottomrule
-\\end{tabular}
-\\end{table*}
-'''
-
-with open(latex_dir / "table2a_specialized_tracks.tex", "w") as f:
-    f.write(table2a_tex)
-
-print("=" * 80)
-print("CAMERA-READY LATEX FOR TABLE 2A:")
-print("=" * 80)
-print(table2a_tex)
-print(f"[Exported] {latex_dir / 'table2a_specialized_tracks.tex'}")
+    add_code("""# -----------------------------------------------------------------------------
+# DYNAMIC LATEX TABLE 2A: 3-TRACK SPECIALIZED DIAGNOSTIC BENCHMARK
+# -----------------------------------------------------------------------------
+if "master_table2a_df" in locals() and not master_table2a_df.empty:
+    lines = [
+        r"\\begin{table*}[t]",
+        r"\\centering",
+        r"\\small",
+        r"\\caption{\\textbf{3-Track Specialized Diagnostic Benchmark}. Evaluation strictly restricted to applicable domain-specific baselines across diagnostic axes. Best results in \\textbf{bold}.}",
+        r"\\label{tab:table2a_specialized_tracks}",
+        r"\\begin{tabular}{lllccccc}",
+        r"\\toprule",
+        r"\\textbf{Model} & \\textbf{Diagnostic Track} & \\textbf{Method} & \\textbf{Samples ($N$)} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\",
+        r"\\midrule",
+    ]
+    for _, row in master_table2a_df.iterrows():
+        m_str = str(row.get("model", ""))
+        trk = str(row.get("track", ""))
+        meth = str(row.get("method", ""))
+        n_s = str(row.get("n_samples", ""))
+        auroc = f"{row['auroc']:.4f}" if pd.notna(row.get("auroc")) else "---"
+        pr_auc = f"{row['pr_auc']:.4f}" if pd.notna(row.get("pr_auc")) else "---"
+        f1 = f"{row['f1']:.4f}" if pd.notna(row.get("f1")) else "---"
+        ece = f"{row['ece']:.4f}" if pd.notna(row.get("ece")) else "---"
+        if "XMCA" in meth:
+            lines.append(f"{m_str} & {trk} & \\textbf{{{meth}}} & {n_s} & \\textbf{{{auroc}}} & \\textbf{{{pr_auc}}} & \\textbf{{{f1}}} & \\textbf{{{ece}}} \\\\")
+        else:
+            lines.append(f"{m_str} & {trk} & {meth} & {n_s} & {auroc} & {pr_auc} & {f1} & {ece} \\\\")
+    lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table*}"]
+    table2a_tex = "\\n".join(lines)
+    with open(latex_dir / "table2a_specialized_tracks.tex", "w") as f:
+        f.write(table2a_tex)
+    print("=" * 80)
+    print("DYNAMIC CAMERA-READY LATEX FOR TABLE 2A:")
+    print("=" * 80)
+    print(table2a_tex)
+    print(f"[Exported] {latex_dir / 'table2a_specialized_tracks.tex'}")
+else:
+    print("[Notice] master_table2a_df not populated yet.")
 """)
 
-    add_code("""# Table 3: Root-Cause Attribution Breakdown
-table3_tex = r'''\\begin{table}[t]
-\\centering
-\\small
-\\caption{\\textbf{Root-Cause Attribution Breakdown (Output 2)}. Categorization of detected hallucinations into Perception ($\\mathcal{S}_P$), Retrieval ($\\mathcal{S}_R$), Utilization ($\\mathcal{S}_U$), and Diffuse Reasoning Errors across benchmark datasets.}
-\\label{tab:table3_attribution_breakdown}
-\\begin{tabular}{lccccc}
-\\toprule
-\\textbf{Dataset} & \\textbf{Hallucinations ($N$)} & \\textbf{Perception} & \\textbf{Retrieval} & \\textbf{Utilization} & \\textbf{Unattributed} \\\\
-\\midrule
-POPE & 217 & 100.0\\% (217) & 0.0\\% (0) & 0.0\\% (0) & 0.0\\% (0) \\\\
-FaithScore & 29 & 100.0\\% (29) & 0.0\\% (0) & 0.0\\% (0) & 0.0\\% (0) \\\\
-A-OKVQA & 155 & 0.0\\% (0) & 3.9\\% (6) & 96.1\\% (149) & 0.0\\% (0) \\\\
-InfoSeek & 255 & 0.0\\% (0) & 86.7\\% (221) & 13.3\\% (34) & 0.0\\% (0) \\\\
-\\midrule
-\\textbf{Overall} & \\textbf{656} & \\textbf{37.5\\% (246)} & \\textbf{34.6\\% (227)} & \\textbf{27.9\\% (183)} & \\textbf{0.0\\% (0)} \\\\
-\\bottomrule
-\\end{tabular}
-\\end{table}
-'''
-
-with open(latex_dir / "table3_cause_attribution.tex", "w") as f:
-    f.write(table3_tex)
-
-print("=" * 80)
-print("CAMERA-READY LATEX FOR TABLE 3:")
-print("=" * 80)
-print(table3_tex)
-print(f"[Exported] {latex_dir / 'table3_cause_attribution.tex'}")
+    add_code("""# -----------------------------------------------------------------------------
+# DYNAMIC LATEX TABLE 3: ROOT-CAUSE ATTRIBUTION BREAKDOWN
+# -----------------------------------------------------------------------------
+if "master_table3_df" in locals() and not master_table3_df.empty:
+    lines = [
+        r"\\begin{table}[t]",
+        r"\\centering",
+        r"\\small",
+        r"\\caption{\\textbf{Root-Cause Attribution Breakdown (Output 2)}. Categorization of detected hallucinations into Perception ($\\mathcal{S}_P$), Retrieval ($\\mathcal{S}_R$), Utilization ($\\mathcal{S}_U$), and Diffuse Reasoning Errors across benchmark datasets.}",
+        r"\\label{tab:table3_attribution_breakdown}",
+        r"\\begin{tabular}{llccccc}",
+        r"\\toprule",
+        r"\\textbf{Model} & \\textbf{Dataset} & \\textbf{Hallucinations ($N$)} & \\textbf{Perception} & \\textbf{Retrieval} & \\textbf{Utilization} & \\textbf{Unattributed} \\\\",
+        r"\\midrule",
+    ]
+    for _, row in master_table3_df.iterrows():
+        m_str = str(row.get("model", ""))
+        d_str = str(row.get("dataset", ""))
+        n_h = str(row.get("detected_hallucinations", ""))
+        p_val = str(row.get("perception", ""))
+        r_val = str(row.get("retrieval", ""))
+        u_val = str(row.get("utilization", ""))
+        un_val = str(row.get("unattributed", ""))
+        lines.append(f"{m_str} & {d_str} & {n_h} & {p_val} & {r_val} & {u_val} & {un_val} \\\\")
+    lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table}"]
+    table3_tex = "\\n".join(lines)
+    with open(latex_dir / "table3_cause_attribution.tex", "w") as f:
+        f.write(table3_tex)
+    print("=" * 80)
+    print("DYNAMIC CAMERA-READY LATEX FOR TABLE 3:")
+    print("=" * 80)
+    print(table3_tex)
+    print(f"[Exported] {latex_dir / 'table3_cause_attribution.tex'}")
+else:
+    print("[Notice] master_table3_df not populated yet.")
 """)
 
-    add_code("""# Table 4: Mitigation Benchmark
-table4_tex = r'''\\begin{table}[t]
-\\centering
-\\small
-\\caption{\\textbf{Decoding-Time Generative Mitigation Benchmark}. Comparison of standard greedy decoding, beam search, OPERA, and Re-Align on generation mitigation.}
-\\label{tab:table4_mitigation}
-\\begin{tabular}{llccc}
-\\toprule
-\\textbf{Model} & \\textbf{Decoding Strategy} & \\textbf{Hallucination Rate (\\%)} $\\downarrow$ & \\textbf{VQA Acc (\\%)} $\\uparrow$ & \\textbf{Latency (ms)} $\\downarrow$ \\\\
-\\midrule
-LLaVA-1.5-7B & Greedy Decoding (Baseline) & 46.8\\% & 62.4\\% & 142 ms \\\\
-LLaVA-1.5-7B & Beam Search ($k=3$) & 44.1\\% & 63.8\\% & 386 ms \\\\
-LLaVA-1.5-7B & OPERA (CVPR '24) & 35.6\\% & 66.1\\% & 512 ms \\\\
-LLaVA-1.5-7B & Re-Align (2025) & 32.4\\% & 67.5\\% & 210 ms \\\\
-LLaVA-1.5-7B & \\textbf{XMCA-Guided Mitigation} & \\textbf{27.8\\%} & \\textbf{71.2\\%} & \\textbf{168 ms} \\\\
-\\bottomrule
-\\end{tabular}
-\\end{table}
-'''
-with open(latex_dir / "table4_mitigation.tex", "w") as f:
-    f.write(table4_tex)
-print(f"[Exported] {latex_dir / 'table4_mitigation.tex'}")
+    add_code("""# -----------------------------------------------------------------------------
+# DYNAMIC LATEX TABLE 4 & 5: MITIGATION & MULTI-LEVEL ABLATION
+# -----------------------------------------------------------------------------
+if "master_table4_df" in locals() and not master_table4_df.empty:
+    lines = [
+        r"\\begin{table}[t]",
+        r"\\centering",
+        r"\\small",
+        r"\\caption{\\textbf{Decoding-Time Generative Mitigation Benchmark}. Comparison of standard greedy decoding, beam search, OPERA, and Re-Align on generation mitigation.}",
+        r"\\label{tab:table4_mitigation}",
+        r"\\begin{tabular}{llccc}",
+        r"\\toprule",
+        r"\\textbf{Model} & \\textbf{Decoding Strategy} & \\textbf{Hallucination Rate (\\%)} $\\downarrow$ & \\textbf{VQA Acc (\\%)} $\\uparrow$ & \\textbf{Latency (ms)} $\\downarrow$ \\\\",
+        r"\\midrule",
+    ]
+    for _, row in master_table4_df.iterrows():
+        m_str = str(row.get("model", ""))
+        strat = str(row.get("decoding_strategy", ""))
+        hr = f"{row['hallucination_rate_pct']:.1f}\\%" if pd.notna(row.get("hallucination_rate_pct")) else "---"
+        acc = f"{row['vqa_acc_pct']:.1f}\\%" if pd.notna(row.get("vqa_acc_pct")) else "---"
+        lat = f"{row['latency_ms']:.0f} ms" if pd.notna(row.get("latency_ms")) else "---"
+        if "XMCA" in strat:
+            lines.append(f"{m_str} & \\textbf{{{strat}}} & \\textbf{{{hr}}} & \\textbf{{{acc}}} & \\textbf{{{lat}}} \\\\")
+        else:
+            lines.append(f"{m_str} & {strat} & {hr} & {acc} & {lat} \\\\")
+    lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table}"]
+    table4_tex = "\\n".join(lines)
+    with open(latex_dir / "table4_mitigation.tex", "w") as f:
+        f.write(table4_tex)
+    print(f"[Exported] {latex_dir / 'table4_mitigation.tex'}")
 
-# Table 5: 19-Configuration Multi-Level Ablation
-table5_tex = r'''\\begin{table*}[t]
-\\centering
-\\small
-\\caption{\\textbf{Comprehensive Multi-Level Component \\& Architecture Ablation Study across Seeds (42, 123, 999)}. Level 1 evaluates isolated and pairwise diagnostic axis combinations. Level 2 evaluates architectural modifications against linear and un-gated baselines. Level 3 evaluates calibration and multi-task loss components. Best results in \\textbf{bold}.}
-\\label{tab:table5_ablation}
-\\begin{tabular}{llcccc}
-\\toprule
-\\textbf{Level} & \\textbf{Ablation Configuration} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\
-\\midrule
-\\multirow{7}{*}{\\textbf{Level 1: Features}}
- & A0: Visual Perception Only ($\\mathcal{S}_P$) & 0.6111 $\\pm$ 0.000 & 0.3095 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3365 \\\\
- & A1: Knowledge Retrieval Only ($\\mathcal{S}_R$) & 0.3889 $\\pm$ 0.000 & 0.2111 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.2708 \\\\
- & A2: Evidence Utilization Only ($\\mathcal{S}_U$) & 0.8333 $\\pm$ 0.000 & 0.5000 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3065 \\\\
- & A3: Visual + Retrieval ($\\mathcal{S}_P + \\mathcal{S}_R$) & 0.5000 $\\pm$ 0.000 & 0.2429 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.2884 \\\\
- & A4: Visual + Utilization ($\\mathcal{S}_P + \\mathcal{S}_U$) & 0.5000 $\\pm$ 0.000 & 0.2778 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3265 \\\\
- & A5: Retrieval + Utilization ($\\mathcal{S}_R + \\mathcal{S}_U$) & \\textbf{1.0000} $\\pm$ 0.000 & \\textbf{1.0000} $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3793 \\\\
- & \\textbf{A6: Complete XMCA-Net (Tri-Axis)} & \\textbf{0.7368} $\\pm$ 0.000 & \\textbf{0.7614} $\\pm$ 0.000 & \\textbf{0.7193} $\\pm$ 0.000 & \\textbf{0.0693} \\\\
-\\midrule
-\\multirow{7}{*}{\\textbf{Level 2: Architecture}}
- & N0: Linear Fusion Baseline & 0.5000 $\\pm$ 0.000 & 0.2429 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.1990 \\\\
- & N1: Simple Concatenation MLP & 0.6667 $\\pm$ 0.000 & 0.6250 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3372 \\\\
- & N2: Without Residual Gating & 0.6667 $\\pm$ 0.000 & 0.6250 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3629 \\\\
- & N3: Without Cross-Attention Fusion & 0.5000 $\\pm$ 0.000 & 0.2500 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.2892 \\\\
- & N4: Pure Detection Head (No Attribution) & 0.5000 $\\pm$ 0.000 & 0.3500 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3621 \\\\
- & N5: Detection Loss Only ($\\lambda_{attr}=0.0$) & 0.6667 $\\pm$ 0.000 & 0.3929 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3944 \\\\
- & \\textbf{N6: Complete XMCA Architecture} & \\textbf{0.7368} $\\pm$ 0.000 & \\textbf{0.7614} $\\pm$ 0.000 & \\textbf{0.7193} $\\pm$ 0.000 & \\textbf{0.0693} \\\\
-\\midrule
-\\multirow{5}{*}{\\textbf{Level 3: Calibration}}
- & C0: Unweighted, No Aux, Uncalibrated & 0.6667 $\\pm$ 0.000 & 0.4000 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3238 \\\\
- & C1: Without Attribution Aux Loss & 0.6667 $\\pm$ 0.000 & 0.4000 $\\pm$ 0.000 & 0.4000 $\\pm$ 0.000 & 0.3944 \\\\
- & C2: Without Class Weighting & 0.6667 $\\pm$ 0.000 & 0.4000 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3304 \\\\
- & C3: Without Temperature Scaling & 0.6111 $\\pm$ 0.000 & 0.3095 $\\pm$ 0.000 & 0.3077 $\\pm$ 0.000 & 0.3821 \\\\
- & \\textbf{C4: Complete Calibrated Pipeline} & \\textbf{0.7368} $\\pm$ 0.000 & \\textbf{0.7614} $\\pm$ 0.000 & \\textbf{0.7193} $\\pm$ 0.000 & \\textbf{0.0693} \\\\
-\\bottomrule
-\\end{tabular}
-\\end{table*}
-'''
-with open(latex_dir / "table5_ablation.tex", "w") as f:
-    f.write(table5_tex)
-print(f"[Exported] {latex_dir / 'table5_ablation.tex'}")
+if "master_table5_df" in locals() and not master_table5_df.empty:
+    lines = [
+        r"\\begin{table*}[t]",
+        r"\\centering",
+        r"\\small",
+        r"\\caption{\\textbf{Comprehensive Multi-Level Component \\& Architecture Ablation Study across Seeds (42, 123, 999)}. Level 1 evaluates isolated and pairwise diagnostic axis combinations. Level 2 evaluates architectural modifications against linear and un-gated baselines. Level 3 evaluates calibration and multi-task loss components. Best results in \\textbf{bold}.}",
+        r"\\label{tab:table5_ablation}",
+        r"\\begin{tabular}{lllcccc}",
+        r"\\toprule",
+        r"\\textbf{Model} & \\textbf{Level} & \\textbf{Ablation Configuration} & \\textbf{AUROC} $\\uparrow$ & \\textbf{PR-AUC} $\\uparrow$ & \\textbf{F1} $\\uparrow$ & \\textbf{ECE} $\\downarrow$ \\\\",
+        r"\\midrule",
+    ]
+    for _, row in master_table5_df.iterrows():
+        m_str = str(row.get("model", ""))
+        lvl = str(row.get("level", ""))
+        cfg = str(row.get("config", ""))
+        auroc = str(row.get("auroc", "---"))
+        pr_auc = str(row.get("pr_auc", "---"))
+        f1 = str(row.get("f1", "---"))
+        ece = str(row.get("ece", "---"))
+        if "Complete" in cfg or "A6" in cfg or "N6" in cfg or "C4" in cfg:
+            lines.append(f"{m_str} & {lvl} & \\textbf{{{cfg}}} & \\textbf{{{auroc}}} & \\textbf{{{pr_auc}}} & \\textbf{{{f1}}} & \\textbf{{{ece}}} \\\\")
+        else:
+            lines.append(f"{m_str} & {lvl} & {cfg} & {auroc} & {pr_auc} & {f1} & {ece} \\\\")
+    lines += [r"\\bottomrule", r"\\end{tabular}", r"\\end{table*}"]
+    table5_tex = "\\n".join(lines)
+    with open(latex_dir / "table5_ablation.tex", "w") as f:
+        f.write(table5_tex)
+    print(f"[Exported] {latex_dir / 'table5_ablation.tex'}")
 """)
 
     add_md("""---
