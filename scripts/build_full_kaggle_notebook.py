@@ -679,27 +679,42 @@ if summary_frames:
 """)
 
     add_code("""# -----------------------------------------------------------------------------
-# FIGURE 4: ROOT-CAUSE ATTRIBUTION DONUT CHARTS PER DATASET
+# FIGURE 4: ROOT-CAUSE ATTRIBUTION DONUT CHARTS (100% DYNAMIC FROM EVALUATION)
 # -----------------------------------------------------------------------------
 try:
     fig, axes = plt.subplots(1, 4, figsize=(16, 4), dpi=300)
     datasets = ['POPE', 'FaithScore', 'A-OKVQA', 'InfoSeek']
-    data_dist = [
-        [100, 0, 0],
-        [100, 0, 0],
-        [0, 4, 96],
-        [0, 87, 13]
-    ]
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
     labels = ['Perception (S_P)', 'Retrieval (S_R)', 'Utilization (S_U)']
 
-    for ax, d_name, vals in zip(axes, datasets, data_dist):
-        nz_vals = [v for v in vals if v > 0]
-        nz_colors = [colors[i] for i, v in enumerate(vals) if v > 0]
-        wedges, texts, autotexts = ax.pie(nz_vals, autopct='%1.1f%%', colors=nz_colors, pctdistance=0.75, startangle=140)
-        for at in autotexts:
-            at.set_fontsize(9)
-            at.set_weight('bold')
+    # Read live attribution directly from master_table3_df
+    attr_data = {}
+    if "master_table3_df" in locals() and not master_table3_df.empty:
+        for _, row in master_table3_df.iterrows():
+            d_name = str(row.get("dataset", "")).strip()
+            try:
+                p_val = float(str(row.get("perception", "0")).split("%")[0])
+                r_val = float(str(row.get("retrieval", "0")).split("%")[0])
+                u_val = float(str(row.get("utilization", "0")).split("%")[0])
+                attr_data[d_name.lower()] = [p_val, r_val, u_val]
+            except Exception:
+                pass
+
+    for ax, d_name in zip(axes, datasets):
+        vals = attr_data.get(d_name.lower(), None)
+        if vals is None or sum(vals) == 0:
+            # Fallback only if no evaluations have run yet
+            vals = [1.0]
+            nz_colors = ['#cccccc']
+            wedges, texts = ax.pie(vals, colors=nz_colors, startangle=140)
+            ax.text(0, 0, "Pending", ha="center", va="center", fontsize=10, color="gray")
+        else:
+            nz_vals = [v for v in vals if v > 0]
+            nz_colors = [colors[i] for i, v in enumerate(vals) if v > 0]
+            wedges, texts, autotexts = ax.pie(nz_vals, autopct='%1.1f%%', colors=nz_colors, pctdistance=0.75, startangle=140)
+            for at in autotexts:
+                at.set_fontsize(9)
+                at.set_weight('bold')
         centre_circle = plt.Circle((0,0), 0.55, fc='white')
         ax.add_artist(centre_circle)
         ax.set_title(d_name, fontsize=12, fontweight='bold')
@@ -714,14 +729,41 @@ except Exception as e:
 """)
 
     add_code("""# -----------------------------------------------------------------------------
-# FIGURE 5: TRI-AXIS FEATURE ABLATION WATERFALL CHART
+# FIGURE 5: TRI-AXIS FEATURE ABLATION WATERFALL CHART (100% DYNAMIC FROM ABLATION)
 # -----------------------------------------------------------------------------
 try:
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
-    configs = ['A0: Vis', 'A1: Ret', 'A2: Utl', 'A3: Vis+Ret', 'A4: Vis+Utl', 'A5: Ret+Utl', 'A6: Full XMCA']
-    aurocs = [0.612, 0.491, 0.534, 0.655, 0.683, 0.552, 0.737]
+    cfg_labels = ['A0: Vis', 'A1: Ret', 'A2: Utl', 'A3: Vis+Ret', 'A4: Vis+Utl', 'A5: Ret+Utl', 'A6: Full XMCA']
+    cfg_keys = ['A0_Visual_Only', 'A1_Retrieval_Only', 'A2_Utilization_Only',
+                'A3_Visual_plus_Retrieval', 'A4_Visual_plus_Utilization',
+                'A5_Retrieval_plus_Utilization', 'A6_Complete_XMCA']
+    
+    aurocs = []
+    # Read live ablation AUROC directly from artifacts/reports
+    rep_files = list(Path("artifacts/reports").glob("tier_1000_*_ablation_report.json"))
+    if rep_files:
+        with open(rep_files[0]) as f:
+            d = json.load(f)
+        lvl1 = d.get("level1_feature_ablation", {})
+        for k in cfg_keys:
+            val = lvl1.get(k, {}).get("auroc", 0.5)
+            aurocs.append(val if isinstance(val, (int, float)) else 0.5)
+    elif "master_table5_df" in locals() and not master_table5_df.empty:
+        for k in cfg_labels:
+            prefix = k.split(":")[0]
+            m_row = master_table5_df[master_table5_df["config"].str.startswith(prefix)]
+            if len(m_row) > 0 and pd.notna(m_row["auroc"].values[0]):
+                try:
+                    aurocs.append(float(str(m_row["auroc"].values[0]).split()[0]))
+                except Exception:
+                    aurocs.append(0.5)
+            else:
+                aurocs.append(0.5)
+    else:
+        aurocs = [0.5] * len(cfg_labels)
+
     bar_colors = ['#aec7e8', '#aec7e8', '#aec7e8', '#756bb1', '#756bb1', '#756bb1', '#1f77b4']
-    bars = ax.bar(configs, aurocs, color=bar_colors, width=0.55, edgecolor='black', alpha=0.9)
+    bars = ax.bar(cfg_labels, aurocs, color=bar_colors, width=0.55, edgecolor='black', alpha=0.9)
     ax.set_ylabel('Held-Out Test AUROC', fontsize=11, fontweight='bold')
     ax.set_title('Three-Axis Feature Ablation: Incremental Contribution of S_P, S_R, S_U', fontsize=12, fontweight='bold')
     ax.set_ylim(0.0, 1.0)
