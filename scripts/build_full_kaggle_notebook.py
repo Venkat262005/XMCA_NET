@@ -160,6 +160,13 @@ if missing:
     print("Dependencies installed successfully.")
 else:
     print("All required dependencies are satisfied.")
+
+# Register SentencePiece null-byte auto-patcher for InternVL2 / InternLM2 tokenizers
+try:
+    from scripts.run_genuine_gpu_feature_extraction import enable_sentencepiece_null_byte_patch
+    enable_sentencepiece_null_byte_patch()
+except Exception as e:
+    print(f"[Notice] SentencePiece patch setup: {e}")
 """)
 
     # =========================================================================
@@ -243,6 +250,12 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     print(f"\\n{'='*80}")
     print(f"STARTING FULL PIPELINE EXECUTION FOR: {model_name}")
     print(f"{'='*80}")
+
+    try:
+        from scripts.run_genuine_gpu_feature_extraction import enable_sentencepiece_null_byte_patch
+        enable_sentencepiece_null_byte_patch()
+    except Exception:
+        pass
     
     features_dir = Path("artifacts/features")
     features_dir.mkdir(parents=True, exist_ok=True)

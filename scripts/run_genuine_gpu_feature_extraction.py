@@ -99,6 +99,76 @@ NON_RAG_DATASETS = {"pope", "faithscore"}
 # Multi-VLM Loading and Input Preparation (LLaVA, Qwen2-VL, InternVL2)
 # ---------------------------------------------------------------------------
 
+def enable_sentencepiece_null_byte_patch():
+    """Patch SentencePiece to handle legacy tokenizer.model files containing null bytes (\x00).
+    
+    SentencePiece >= 0.2.2 introduced a strict validation check:
+        'RuntimeError: INTERNAL: piece must not include null character.'
+    Older models like InternVL2-2B / InternLM2 have a single \x00 byte piece in their vocab.
+    This monkeypatch intercepts SentencePieceProcessor.LoadFromFile and LoadFromSerializedProto,
+    cleans the null byte using sentencepiece_model_pb2, and re-loads cleanly.
+    """
+    try:
+        import tempfile
+        import sentencepiece as spm
+        import sentencepiece.sentencepiece_model_pb2 as spm_pb2
+
+        if getattr(spm.SentencePieceProcessor, "_xmca_null_byte_patched", False):
+            return
+
+        orig_load_from_file = spm.SentencePieceProcessor.LoadFromFile
+        orig_load_from_proto = spm.SentencePieceProcessor.LoadFromSerializedProto
+
+        def _clean_proto(proto):
+            modified = False
+            for piece in proto.pieces:
+                if "\x00" in piece.piece:
+                    piece.piece = piece.piece.replace("\x00", "<0x00>")
+                    if not piece.piece:
+                        piece.piece = "<0x00>"
+                    modified = True
+            return modified
+
+        def _safe_load_from_file(self, filename):
+            try:
+                return orig_load_from_file(self, filename)
+            except RuntimeError as ex:
+                if "piece must not include null character" in str(ex):
+                    p = spm_pb2.ModelProto()
+                    with open(filename, "rb") as f:
+                        p.ParseFromString(f.read())
+                    if _clean_proto(p):
+                        try:
+                            with open(filename, "wb") as f:
+                                f.write(p.SerializeToString())
+                            return orig_load_from_file(self, filename)
+                        except (PermissionError, OSError):
+                            with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
+                                tf.write(p.SerializeToString())
+                                tf_path = tf.name
+                            return orig_load_from_file(self, tf_path)
+                raise
+
+        def _safe_load_from_proto(self, proto_bytes):
+            try:
+                return orig_load_from_proto(self, proto_bytes)
+            except RuntimeError as ex:
+                if "piece must not include null character" in str(ex):
+                    p = spm_pb2.ModelProto()
+                    p.ParseFromString(proto_bytes)
+                    if _clean_proto(p):
+                        proto_bytes = p.SerializeToString()
+                    return orig_load_from_proto(self, proto_bytes)
+                raise
+
+        spm.SentencePieceProcessor.LoadFromFile = _safe_load_from_file
+        spm.SentencePieceProcessor.LoadFromSerializedProto = _safe_load_from_proto
+        spm.SentencePieceProcessor._xmca_null_byte_patched = True
+        print("[SentencePiece] Null-byte auto-patcher registered for legacy tokenizers (InternVL2 / InternLM2).")
+    except Exception as patch_err:
+        print(f"[SentencePiece] Could not register null-byte patch: {patch_err}")
+
+
 def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
     """Load model and processor/tokenizer for any of the 3 supported VLMs."""
     hf_id = cfg["hf_id"]
@@ -119,8 +189,41 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
             trust_remote_code=True,
         )
     elif "internvl" in model_name:
+        enable_sentencepiece_null_byte_patch()
         from transformers import AutoModel, AutoTokenizer
-        processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=False)
+        try:
+            from transformers import PreTrainedModel
+            import torch.nn as nn
+
+            def _get_tied_keys(mod):
+                val = getattr(mod, "_all_tied_weights_keys", None)
+                if isinstance(val, dict):
+                    return val
+                val = getattr(mod, "_tied_weights_keys", None)
+                if isinstance(val, dict):
+                    return val
+                if isinstance(val, (list, tuple, set)):
+                    return {k: k for k in val}
+                return {}
+
+            def _set_tied_keys(mod, val):
+                mod._all_tied_weights_keys = val if isinstance(val, dict) else {}
+
+            PreTrainedModel.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+            nn.Module.all_tied_weights_keys = property(_get_tied_keys, _set_tied_keys)
+        except Exception:
+            pass
+
+        try:
+            processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=False)
+        except Exception as e:
+            print(f"[InternVL2 Tokenizer Warning] use_fast=False raised {e}. Retrying default...")
+            try:
+                processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True)
+            except Exception as e2:
+                print(f"[InternVL2 Tokenizer Warning] Retrying with use_fast=True: {e2}")
+                processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=True)
+
         dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
         model = AutoModel.from_pretrained(
             hf_id,
@@ -619,6 +722,7 @@ def main():
     args = parser.parse_args()
 
     model_name = args.model
+    enable_sentencepiece_null_byte_patch()
     cfg = MODEL_REGISTRY[model_name]
     output_dir = REPO_ROOT / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)

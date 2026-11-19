@@ -150,24 +150,75 @@ class InternVLAdapter(BaseVLMAdapter):
 
         # Guard against upstream SentencePiece >= 0.2.2 regression that breaks InternLM2 tokenizers
         try:
-            import sentencepiece
-            sp_ver = getattr(sentencepiece, "__version__", "")
-            if sp_ver.startswith("0.2.2") or (sp_ver and tuple(map(int, sp_ver.split(".")[:3])) >= (0, 2, 2)):
-                import subprocess
-                print(f"Warning: SentencePiece version {sp_ver} detected. InternVL requires sentencepiece < 0.2.2.")
-                print("Automatically adjusting to sentencepiece<0.2.2...")
-                subprocess.run([sys.executable, "-m", "pip", "install", "-q", "sentencepiece<0.2.2"], check=True)
-                import importlib
-                importlib.reload(sentencepiece)
-        except Exception:
+            import tempfile
+            import sentencepiece as spm
+            import sentencepiece.sentencepiece_model_pb2 as spm_pb2
+
+            if not getattr(spm.SentencePieceProcessor, "_xmca_null_byte_patched", False):
+                orig_load_from_file = spm.SentencePieceProcessor.LoadFromFile
+                orig_load_from_proto = spm.SentencePieceProcessor.LoadFromSerializedProto
+
+                def _clean_proto(proto):
+                    modified = False
+                    for piece in proto.pieces:
+                        if "\x00" in piece.piece:
+                            piece.piece = piece.piece.replace("\x00", "<0x00>")
+                            if not piece.piece:
+                                piece.piece = "<0x00>"
+                            modified = True
+                    return modified
+
+                def _safe_load_from_file(sp_self, filename):
+                    try:
+                        return orig_load_from_file(sp_self, filename)
+                    except RuntimeError as ex:
+                        if "piece must not include null character" in str(ex):
+                            p = spm_pb2.ModelProto()
+                            with open(filename, "rb") as f:
+                                p.ParseFromString(f.read())
+                            if _clean_proto(p):
+                                try:
+                                    with open(filename, "wb") as f:
+                                        f.write(p.SerializeToString())
+                                    return orig_load_from_file(sp_self, filename)
+                                except (PermissionError, OSError):
+                                    with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
+                                        tf.write(p.SerializeToString())
+                                        tf_path = tf.name
+                                    return orig_load_from_file(sp_self, tf_path)
+                        raise
+
+                def _safe_load_from_proto(sp_self, proto_bytes):
+                    try:
+                        return orig_load_from_proto(sp_self, proto_bytes)
+                    except RuntimeError as ex:
+                        if "piece must not include null character" in str(ex):
+                            p = spm_pb2.ModelProto()
+                            p.ParseFromString(proto_bytes)
+                            if _clean_proto(p):
+                                proto_bytes = p.SerializeToString()
+                            return orig_load_from_proto(sp_self, proto_bytes)
+                        raise
+
+                spm.SentencePieceProcessor.LoadFromFile = _safe_load_from_file
+                spm.SentencePieceProcessor.LoadFromSerializedProto = _safe_load_from_proto
+                spm.SentencePieceProcessor._xmca_null_byte_patched = True
+        except Exception as e:
             pass
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id,
-            revision=self.revision,
-            trust_remote_code=True,
-            use_fast=False,
-        )
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_id,
+                revision=self.revision,
+                trust_remote_code=True,
+                use_fast=False,
+            )
+        except Exception:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_id,
+                revision=self.revision,
+                trust_remote_code=True,
+            )
 
         max_memory = {0: self.config.max_memory_per_gpu, 1: self.config.max_memory_per_gpu}
         if gpu_count == 1:
