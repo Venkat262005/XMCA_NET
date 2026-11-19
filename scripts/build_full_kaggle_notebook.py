@@ -147,6 +147,29 @@ if str(WORKDIR) not in sys.path:
     sys.path.insert(0, str(WORKDIR))
 os.chdir(WORKDIR)
 print(f"Active Working Directory: {os.getcwd()}")
+
+# Automatically restore previous run artifacts/results if mounted in /kaggle/input
+import shutil
+kaggle_input = Path("/kaggle/input")
+if kaggle_input.exists():
+    for candidate in kaggle_input.rglob("genuine_features_*_test.parquet"):
+        src_feat_dir = candidate.parent
+        dst_feat_dir = WORKDIR / "artifacts/features"
+        dst_feat_dir.mkdir(parents=True, exist_ok=True)
+        for f in src_feat_dir.glob("*.parquet"):
+            dst_f = dst_feat_dir / f.name
+            if not dst_f.exists():
+                shutil.copy2(f, dst_f)
+                print(f"[Auto-Restored Feature] {f.name}")
+    for candidate in kaggle_input.rglob("genuine_test_summary_*.csv"):
+        src_res_dir = candidate.parent
+        dst_res_dir = WORKDIR / "results/genuine"
+        dst_res_dir.mkdir(parents=True, exist_ok=True)
+        for f in src_res_dir.glob("*.csv"):
+            dst_f = dst_res_dir / f.name
+            if not dst_f.exists():
+                shutil.copy2(f, dst_f)
+                print(f"[Auto-Restored Result] {f.name}")
 """)
 
     add_code("""# Install required dependencies if missing
