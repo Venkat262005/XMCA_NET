@@ -150,54 +150,89 @@ class InternVLAdapter(BaseVLMAdapter):
 
         # Guard against upstream SentencePiece >= 0.2.2 regression that breaks InternLM2 tokenizers
         try:
+            from pathlib import Path
             import tempfile
             import sentencepiece as spm
             import sentencepiece.sentencepiece_model_pb2 as spm_pb2
+
+            def _clean_proto(proto):
+                modified = False
+                seen = set()
+                for idx, piece in enumerate(proto.pieces):
+                    text = piece.piece
+                    needs_rep = False
+                    if "\x00" in text:
+                        text = text.replace("\x00", "<|null_byte|>")
+                        if not text:
+                            text = "<|null_byte|>"
+                        needs_rep = True
+                    if text == "<0x00>" and idx != 3:
+                        text = "<|null_byte|>"
+                        needs_rep = True
+                    if text in seen:
+                        text = f"<|dup_{idx}|>"
+                        needs_rep = True
+                    seen.add(text)
+                    if needs_rep:
+                        piece.piece = text
+                        modified = True
+                return modified
+
+            try:
+                hf_home = Path.home() / ".cache" / "huggingface" / "hub"
+                if hf_home.exists():
+                    for model_file in hf_home.glob("**/tokenizer.model"):
+                        try:
+                            p = spm_pb2.ModelProto()
+                            with open(model_file, "rb") as f:
+                                p.ParseFromString(f.read())
+                            if _clean_proto(p):
+                                with open(model_file, "wb") as f:
+                                    f.write(p.SerializeToString())
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
             if not getattr(spm.SentencePieceProcessor, "_xmca_null_byte_patched", False):
                 orig_load_from_file = spm.SentencePieceProcessor.LoadFromFile
                 orig_load_from_proto = spm.SentencePieceProcessor.LoadFromSerializedProto
 
-                def _clean_proto(proto):
-                    modified = False
-                    for piece in proto.pieces:
-                        if "\x00" in piece.piece:
-                            piece.piece = piece.piece.replace("\x00", "<0x00>")
-                            if not piece.piece:
-                                piece.piece = "<0x00>"
-                            modified = True
-                    return modified
-
                 def _safe_load_from_file(sp_self, filename):
                     try:
                         return orig_load_from_file(sp_self, filename)
                     except RuntimeError as ex:
-                        if "piece must not include null character" in str(ex):
+                        err_msg = str(ex)
+                        if ("piece must not include null character" in err_msg or 
+                            "already defined" in err_msg or 
+                            "<0x00>" in err_msg):
                             p = spm_pb2.ModelProto()
                             with open(filename, "rb") as f:
                                 p.ParseFromString(f.read())
-                            if _clean_proto(p):
-                                try:
-                                    with open(filename, "wb") as f:
-                                        f.write(p.SerializeToString())
-                                    return orig_load_from_file(sp_self, filename)
-                                except (PermissionError, OSError):
-                                    with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
-                                        tf.write(p.SerializeToString())
-                                        tf_path = tf.name
-                                    return orig_load_from_file(sp_self, tf_path)
+                            _clean_proto(p)
+                            try:
+                                with open(filename, "wb") as f:
+                                    f.write(p.SerializeToString())
+                                target_path = filename
+                            except (PermissionError, OSError):
+                                with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
+                                    tf.write(p.SerializeToString())
+                                    target_path = tf.name
+                            return orig_load_from_file(sp_self, target_path)
                         raise
 
                 def _safe_load_from_proto(sp_self, proto_bytes):
                     try:
                         return orig_load_from_proto(sp_self, proto_bytes)
                     except RuntimeError as ex:
-                        if "piece must not include null character" in str(ex):
+                        err_msg = str(ex)
+                        if ("piece must not include null character" in err_msg or 
+                            "already defined" in err_msg or 
+                            "<0x00>" in err_msg):
                             p = spm_pb2.ModelProto()
                             p.ParseFromString(proto_bytes)
-                            if _clean_proto(p):
-                                proto_bytes = p.SerializeToString()
-                            return orig_load_from_proto(sp_self, proto_bytes)
+                            _clean_proto(p)
+                            return orig_load_from_proto(sp_self, p.SerializeToString())
                         raise
 
                 spm.SentencePieceProcessor.LoadFromFile = _safe_load_from_file

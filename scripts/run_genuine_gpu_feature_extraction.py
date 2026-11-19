@@ -104,14 +104,60 @@ def enable_sentencepiece_null_byte_patch():
     
     SentencePiece >= 0.2.2 introduced a strict validation check:
         'RuntimeError: INTERNAL: piece must not include null character.'
-    Older models like InternVL2-2B / InternLM2 have a single \x00 byte piece in their vocab.
-    This monkeypatch intercepts SentencePieceProcessor.LoadFromFile and LoadFromSerializedProto,
-    cleans the null byte using sentencepiece_model_pb2, and re-loads cleanly.
+    Older models like InternVL2-2B / InternLM2 have a single \x00 byte piece in their vocab (index 354).
+    InternLM2's vocab also defines index 3 as byte fallback '<0x00>'. Replacing \x00 with '<0x00>'
+    creates a duplicate token causing:
+        'RuntimeError: INTERNAL: <0x00> is already defined.'
+    This monkeypatch sanitizes \x00 and any duplicate '<0x00>' into '<|null_byte|>'
+    transparently on the fly, and also pre-sanitizes any cached models on disk.
     """
     try:
+        from pathlib import Path
         import tempfile
         import sentencepiece as spm
         import sentencepiece.sentencepiece_model_pb2 as spm_pb2
+
+        def _clean_proto(proto):
+            modified = False
+            seen = set()
+            for idx, piece in enumerate(proto.pieces):
+                text = piece.piece
+                needs_rep = False
+                if "\x00" in text:
+                    text = text.replace("\x00", "<|null_byte|>")
+                    if not text:
+                        text = "<|null_byte|>"
+                    needs_rep = True
+                # Index 3 is legitimate byte fallback '<0x00>'. Any other token named '<0x00>' is duplicate.
+                if text == "<0x00>" and idx != 3:
+                    text = "<|null_byte|>"
+                    needs_rep = True
+                if text in seen:
+                    text = f"<|dup_{idx}|>"
+                    needs_rep = True
+                seen.add(text)
+                if needs_rep:
+                    piece.piece = text
+                    modified = True
+            return modified
+
+        # Pre-sanitize cached Hugging Face tokenizer models if present
+        try:
+            hf_home = Path.home() / ".cache" / "huggingface" / "hub"
+            if hf_home.exists():
+                for model_file in hf_home.glob("**/tokenizer.model"):
+                    try:
+                        p = spm_pb2.ModelProto()
+                        with open(model_file, "rb") as f:
+                            p.ParseFromString(f.read())
+                        if _clean_proto(p):
+                            with open(model_file, "wb") as f:
+                                f.write(p.SerializeToString())
+                            print(f"[SentencePiece] Pre-sanitized cached model: {model_file.name}")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         if getattr(spm.SentencePieceProcessor, "_xmca_null_byte_patched", False):
             return
@@ -119,52 +165,47 @@ def enable_sentencepiece_null_byte_patch():
         orig_load_from_file = spm.SentencePieceProcessor.LoadFromFile
         orig_load_from_proto = spm.SentencePieceProcessor.LoadFromSerializedProto
 
-        def _clean_proto(proto):
-            modified = False
-            for piece in proto.pieces:
-                if "\x00" in piece.piece:
-                    piece.piece = piece.piece.replace("\x00", "<0x00>")
-                    if not piece.piece:
-                        piece.piece = "<0x00>"
-                    modified = True
-            return modified
-
         def _safe_load_from_file(self, filename):
             try:
                 return orig_load_from_file(self, filename)
             except RuntimeError as ex:
-                if "piece must not include null character" in str(ex):
+                err_msg = str(ex)
+                if ("piece must not include null character" in err_msg or 
+                    "already defined" in err_msg or 
+                    "<0x00>" in err_msg):
                     p = spm_pb2.ModelProto()
                     with open(filename, "rb") as f:
                         p.ParseFromString(f.read())
-                    if _clean_proto(p):
-                        try:
-                            with open(filename, "wb") as f:
-                                f.write(p.SerializeToString())
-                            return orig_load_from_file(self, filename)
-                        except (PermissionError, OSError):
-                            with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
-                                tf.write(p.SerializeToString())
-                                tf_path = tf.name
-                            return orig_load_from_file(self, tf_path)
+                    _clean_proto(p)
+                    try:
+                        with open(filename, "wb") as f:
+                            f.write(p.SerializeToString())
+                        target_path = filename
+                    except (PermissionError, OSError):
+                        with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as tf:
+                            tf.write(p.SerializeToString())
+                            target_path = tf.name
+                    return orig_load_from_file(self, target_path)
                 raise
 
         def _safe_load_from_proto(self, proto_bytes):
             try:
                 return orig_load_from_proto(self, proto_bytes)
             except RuntimeError as ex:
-                if "piece must not include null character" in str(ex):
+                err_msg = str(ex)
+                if ("piece must not include null character" in err_msg or 
+                    "already defined" in err_msg or 
+                    "<0x00>" in err_msg):
                     p = spm_pb2.ModelProto()
                     p.ParseFromString(proto_bytes)
-                    if _clean_proto(p):
-                        proto_bytes = p.SerializeToString()
-                    return orig_load_from_proto(self, proto_bytes)
+                    _clean_proto(p)
+                    return orig_load_from_proto(self, p.SerializeToString())
                 raise
 
         spm.SentencePieceProcessor.LoadFromFile = _safe_load_from_file
         spm.SentencePieceProcessor.LoadFromSerializedProto = _safe_load_from_proto
         spm.SentencePieceProcessor._xmca_null_byte_patched = True
-        print("[SentencePiece] Null-byte auto-patcher registered for legacy tokenizers (InternVL2 / InternLM2).")
+        print("[SentencePiece] Null-byte & duplicate token patch registered for legacy tokenizers (InternVL2 / InternLM2).")
     except Exception as patch_err:
         print(f"[SentencePiece] Could not register null-byte patch: {patch_err}")
 
