@@ -103,6 +103,12 @@ def main():
         val_df = val_df[val_df["extraction_error"].isna()].reset_index(drop=True)
 
     # Verify ground truth labels are present and binary
+    if len(train_df) == 0:
+        raise ValueError(
+            f"No valid training samples remaining for '{model_name}' after dropping extraction errors! "
+            f"Feature parquets appear to be from an earlier failed extraction run. "
+            f"Please re-run feature extraction: python scripts/run_genuine_gpu_feature_extraction.py --model {model_name}"
+        )
     assert "ground_truth_label" in train_df.columns, "Missing ground_truth_label in training features."
     assert train_df["ground_truth_label"].isin([0, 1]).all(), "Non-binary labels found."
 

@@ -157,10 +157,20 @@ if kaggle_input.exists():
         dst_feat_dir = WORKDIR / "artifacts/features"
         dst_feat_dir.mkdir(parents=True, exist_ok=True)
         for f in src_feat_dir.glob("*.parquet"):
-            dst_f = dst_feat_dir / f.name
-            if not dst_f.exists():
-                shutil.copy2(f, dst_f)
-                print(f"[Auto-Restored Feature] {f.name}")
+            try:
+                # Inspect candidate parquet: skip restoring if it has extraction errors from an earlier failed run
+                cand_df = pd.read_parquet(f)
+                if "extraction_error" in cand_df.columns:
+                    err_cnt = cand_df["extraction_error"].notna().sum()
+                    if err_cnt > 0.05 * len(cand_df):
+                        print(f"[Skip Restore] {f.name} contains {err_cnt}/{len(cand_df)} extraction errors from a prior run. Skipping so clean GPU extraction runs.")
+                        continue
+                dst_f = dst_feat_dir / f.name
+                if not dst_f.exists():
+                    shutil.copy2(f, dst_f)
+                    print(f"[Auto-Restored Feature] {f.name}")
+            except Exception as e:
+                pass
     for candidate in kaggle_input.rglob("genuine_test_summary_*.csv"):
         src_res_dir = candidate.parent
         dst_res_dir = WORKDIR / "results/genuine"
@@ -269,6 +279,31 @@ import torch
 import pandas as pd
 from pathlib import Path
 
+def check_feature_parquets_valid(features_dir: Path, model_name: str) -> bool:
+    splits = ["dev_train", "dev_val", "test"]
+    for s in splits:
+        p = features_dir / f"genuine_features_{model_name}_{s}.parquet"
+        if not p.exists():
+            return False
+        try:
+            df = pd.read_parquet(p)
+            if len(df) == 0:
+                print(f"[Integrity Check] {p.name} is empty (0 rows).")
+                return False
+            if "extraction_error" in df.columns:
+                err_cnt = df["extraction_error"].notna().sum()
+                if err_cnt > 0.05 * len(df):
+                    print(f"[Integrity Check] {p.name} contains {err_cnt}/{len(df)} extraction errors! Invalidating for fresh GPU extraction.")
+                    return False
+            if "sp_score" in df.columns:
+                if (df["sp_score"] == 0.0).all() and len(df) > 10:
+                    print(f"[Integrity Check] {p.name} has all zeros for sp_score! Invalidating for fresh GPU extraction.")
+                    return False
+        except Exception as ex:
+            print(f"[Integrity Check] Failed reading {p.name}: {ex}")
+            return False
+    return True
+
 def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = True):
     print(f"\\n{'='*80}")
     print(f"STARTING FULL PIPELINE EXECUTION FOR: {model_name}")
@@ -286,14 +321,21 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     dev_val = features_dir / f"genuine_features_{model_name}_dev_val.parquet"
     test = features_dir / f"genuine_features_{model_name}_test.parquet"
     
-    features_ready = dev_train.exists() and dev_val.exists() and test.exists()
+    features_ready = check_feature_parquets_valid(features_dir, model_name)
     
-    # Step 1 & 2: GPU Feature Extraction (if parquets missing or forced)
+    # Step 1: GPU Feature Extraction (if parquets missing, corrupt, or forced)
     if not features_ready or not skip_extraction_if_present:
+        # Purge any corrupt remnants for this model
+        for p in [dev_train, dev_val, test]:
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
         print(f"\\n[Step 1/6] Running genuine GPU feature extraction for {model_name}...")
         subprocess.run([sys.executable, "scripts/run_genuine_gpu_feature_extraction.py", "--model", model_name, "--split", "all"], check=True)
     else:
-        print(f"\\n[Step 1/6] Genuine feature parquets found for {model_name}. Skipping re-extraction.")
+        print(f"\\n[Step 1/6] Genuine feature parquets verified for {model_name}. Skipping re-extraction.")
         for p in [dev_train, dev_val, test]:
             print(f"  - {p.name} ({p.stat().st_size / (1024**2):.2f} MB)")
             
