@@ -266,10 +266,14 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
                 processor = AutoTokenizer.from_pretrained(hf_id, trust_remote_code=True, use_fast=True)
 
         dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+        # InternVL2-2B is a compact 2.2B model (~4.4GB in float16) that fits easily on a single GPU.
+        # Mapping all modules to {"": 0} (GPU 0) prevents cross-GPU tensor device mismatches
+        # between InternViT (vision_model on GPU 0) and InternLM2 embeddings (on GPU 1).
+        internvl_device_map = {"": 0} if torch.cuda.is_available() else "auto"
         model = AutoModel.from_pretrained(
             hf_id,
             torch_dtype=dtype,
-            device_map="auto",
+            device_map=internvl_device_map,
             trust_remote_code=True,
         )
 
@@ -282,10 +286,34 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
         if img_ctx_id is not None:
             model.img_context_token_id = img_ctx_id
 
-        # Safety monkeypatch: guarantee image_flags and img_context_token_id are always passed into forward
+        # Safety monkeypatches: guarantee image_flags, img_context_token_id, and cross-submodule device alignment
         try:
             orig_forward = model.__class__.forward
             def _internvl_safe_forward(self, *args, **kwargs):
+                # 1. Device alignment for input_ids to language_model embedding device
+                if "input_ids" in kwargs and kwargs["input_ids"] is not None:
+                    try:
+                        emb = self.language_model.get_input_embeddings()
+                        if hasattr(emb, "weight") and kwargs["input_ids"].device != emb.weight.device:
+                            kwargs["input_ids"] = kwargs["input_ids"].to(emb.weight.device)
+                    except Exception:
+                        pass
+                if "attention_mask" in kwargs and kwargs["attention_mask"] is not None:
+                    try:
+                        emb = self.language_model.get_input_embeddings()
+                        if hasattr(emb, "weight") and kwargs["attention_mask"].device != emb.weight.device:
+                            kwargs["attention_mask"] = kwargs["attention_mask"].to(emb.weight.device)
+                    except Exception:
+                        pass
+
+                # 2. Safety injection and device alignment for image_flags / pixel_values
+                if "pixel_values" in kwargs and kwargs["pixel_values"] is not None:
+                    try:
+                        vis_dev = next(self.vision_model.parameters()).device
+                        if kwargs["pixel_values"].device != vis_dev:
+                            kwargs["pixel_values"] = kwargs["pixel_values"].to(vis_dev)
+                    except Exception:
+                        pass
                 if kwargs.get("image_flags", None) is None:
                     if "pixel_values" in kwargs and kwargs["pixel_values"] is not None:
                         pv = kwargs["pixel_values"]
@@ -293,13 +321,38 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
                     elif len(args) > 0 and args[0] is not None and hasattr(args[0], "shape"):
                         pv = args[0]
                         kwargs["image_flags"] = torch.ones((pv.shape[0], 1), dtype=torch.long, device=pv.device)
+                elif "image_flags" in kwargs and kwargs["image_flags"] is not None:
+                    try:
+                        vis_dev = next(self.vision_model.parameters()).device
+                        if kwargs["image_flags"].device != vis_dev:
+                            kwargs["image_flags"] = kwargs["image_flags"].to(vis_dev)
+                    except Exception:
+                        pass
+
+                # 3. img_context_token_id guarantee
                 if getattr(self, "img_context_token_id", None) is None:
                     if hasattr(processor, "convert_tokens_to_ids"):
                         self.img_context_token_id = processor.convert_tokens_to_ids("<IMG_CONTEXT>")
                     elif hasattr(processor, "tokenizer") and hasattr(processor.tokenizer, "convert_tokens_to_ids"):
                         self.img_context_token_id = processor.tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>")
+
                 return orig_forward(self, *args, **kwargs)
             model.__class__.forward = _internvl_safe_forward
+        except Exception:
+            pass
+
+        try:
+            orig_extract_feature = model.__class__.extract_feature
+            def _internvl_safe_extract_feature(self, pixel_values):
+                vit_embeds = orig_extract_feature(self, pixel_values)
+                try:
+                    lm_dev = self.language_model.get_input_embeddings().weight.device
+                    if vit_embeds.device != lm_dev:
+                        vit_embeds = vit_embeds.to(lm_dev)
+                except Exception:
+                    pass
+                return vit_embeds
+            model.__class__.extract_feature = _internvl_safe_extract_feature
         except Exception:
             pass
     else:  # llava
@@ -377,7 +430,21 @@ def prepare_vlm_forward_inputs(
         if model is not None and hasattr(model, "dtype"):
             dtype = model.dtype
 
-        pixel_values = transform(image).unsqueeze(0).to(target_device, dtype=dtype)
+        # Resolve explicit devices for vision and language submodules
+        vis_device = target_device
+        lm_device = target_device
+        if model is not None:
+            try:
+                if hasattr(model, "vision_model"):
+                    vis_device = next(model.vision_model.parameters()).device
+                if hasattr(model, "language_model"):
+                    emb = model.language_model.get_input_embeddings()
+                    if hasattr(emb, "weight"):
+                        lm_device = emb.weight.device
+            except Exception:
+                pass
+
+        pixel_values = transform(image).unsqueeze(0).to(vis_device, dtype=dtype)
         num_patches = pixel_values.shape[0]
         num_image_token = getattr(model, "num_image_token", 256) if model is not None else 256
 
@@ -385,14 +452,14 @@ def prepare_vlm_forward_inputs(
         prompt = f"{image_tokens}\n{full_text}"
         tokens = processor(prompt, return_tensors="pt")
 
-        image_flags = torch.ones((num_patches, 1), dtype=torch.long, device=target_device)
+        image_flags = torch.ones((num_patches, 1), dtype=torch.long, device=vis_device)
         out = {
-            "input_ids": tokens["input_ids"].to(target_device),
+            "input_ids": tokens["input_ids"].to(lm_device),
             "pixel_values": pixel_values,
             "image_flags": image_flags,
         }
         if "attention_mask" in tokens:
-            out["attention_mask"] = tokens["attention_mask"].to(target_device)
+            out["attention_mask"] = tokens["attention_mask"].to(lm_device)
         return out
 
     else:  # llava
@@ -798,7 +865,16 @@ def extract_features_for_split(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    return pd.DataFrame(records)
+    df_out = pd.DataFrame(records)
+    if "extraction_error" in df_out.columns:
+        err_total = df_out["extraction_error"].notna().sum()
+        if err_total > 0.5 * len(df_out):
+            raise RuntimeError(
+                f"Feature extraction failed critically for '{model_name}' on split '{split_name}': "
+                f"{err_total}/{len(df_out)} rows ({err_total/len(df_out)*100:.1f}%) had extraction errors!\n"
+                f"First error encountered: {df_out['extraction_error'].dropna().iloc[0]}"
+            )
+    return df_out
 
 
 def main():

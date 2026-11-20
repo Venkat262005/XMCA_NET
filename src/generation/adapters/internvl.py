@@ -145,6 +145,8 @@ class InternVLAdapter(BaseVLMAdapter):
         gpu_count = torch.cuda.device_count()
         if "8B" in self.model_id and gpu_count >= 2:
             device_map = build_internvl2_8b_device_map(num_gpus=gpu_count)
+        elif gpu_count >= 1:
+            device_map = {"": 0}
         else:
             device_map = self.config.device_map
 
