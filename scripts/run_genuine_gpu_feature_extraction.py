@@ -272,6 +272,36 @@ def load_vlm_on_device(model_name: str, cfg: Dict[str, Any], device: str):
             device_map="auto",
             trust_remote_code=True,
         )
+
+        # Resolve and store img_context_token_id on the model instance
+        img_ctx_id = None
+        if hasattr(processor, "convert_tokens_to_ids"):
+            img_ctx_id = processor.convert_tokens_to_ids("<IMG_CONTEXT>")
+        elif hasattr(processor, "tokenizer") and hasattr(processor.tokenizer, "convert_tokens_to_ids"):
+            img_ctx_id = processor.tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>")
+        if img_ctx_id is not None:
+            model.img_context_token_id = img_ctx_id
+
+        # Safety monkeypatch: guarantee image_flags and img_context_token_id are always passed into forward
+        try:
+            orig_forward = model.__class__.forward
+            def _internvl_safe_forward(self, *args, **kwargs):
+                if kwargs.get("image_flags", None) is None:
+                    if "pixel_values" in kwargs and kwargs["pixel_values"] is not None:
+                        pv = kwargs["pixel_values"]
+                        kwargs["image_flags"] = torch.ones((pv.shape[0], 1), dtype=torch.long, device=pv.device)
+                    elif len(args) > 0 and args[0] is not None and hasattr(args[0], "shape"):
+                        pv = args[0]
+                        kwargs["image_flags"] = torch.ones((pv.shape[0], 1), dtype=torch.long, device=pv.device)
+                if getattr(self, "img_context_token_id", None) is None:
+                    if hasattr(processor, "convert_tokens_to_ids"):
+                        self.img_context_token_id = processor.convert_tokens_to_ids("<IMG_CONTEXT>")
+                    elif hasattr(processor, "tokenizer") and hasattr(processor.tokenizer, "convert_tokens_to_ids"):
+                        self.img_context_token_id = processor.tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>")
+                return orig_forward(self, *args, **kwargs)
+            model.__class__.forward = _internvl_safe_forward
+        except Exception:
+            pass
     else:  # llava
         from transformers import AutoProcessor
         try:
@@ -306,12 +336,20 @@ def prepare_vlm_forward_inputs(
     context: Optional[str],
     cfg: Dict[str, Any],
     device: str,
+    model: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Format prompt and preprocess image appropriately for each VLM architecture."""
     if context:
         full_text = f"Reference: {context}\nQuestion: {q_text}"
     else:
         full_text = q_text
+
+    target_device = device
+    if model is not None:
+        try:
+            target_device = getattr(model, "device", None) or next(model.parameters()).device
+        except Exception:
+            target_device = device
 
     if "qwen" in model_name:
         try:
@@ -328,27 +366,37 @@ def prepare_vlm_forward_inputs(
         except Exception:
             text_prompt = f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{full_text}<|im_end|>\n<|im_start|>assistant\n"
         inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
-        return {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        return {k: v.to(target_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
     elif "internvl" in model_name:
         from src.generation.adapters.internvl import build_transform
         transform = build_transform(input_size=cfg.get("image_size", 448))
         dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
-        pixel_values = transform(image).unsqueeze(0).to(device, dtype=dtype)
-        prompt = f"<image>\n{full_text}"
+        if model is not None and hasattr(model, "dtype"):
+            dtype = model.dtype
+
+        pixel_values = transform(image).unsqueeze(0).to(target_device, dtype=dtype)
+        num_patches = pixel_values.shape[0]
+        num_image_token = getattr(model, "num_image_token", 256) if model is not None else 256
+
+        image_tokens = "<img>" + "<IMG_CONTEXT>" * (num_image_token * num_patches) + "</img>"
+        prompt = f"{image_tokens}\n{full_text}"
         tokens = processor(prompt, return_tensors="pt")
+
+        image_flags = torch.ones((num_patches, 1), dtype=torch.long, device=target_device)
         out = {
-            "input_ids": tokens["input_ids"].to(device),
+            "input_ids": tokens["input_ids"].to(target_device),
             "pixel_values": pixel_values,
+            "image_flags": image_flags,
         }
         if "attention_mask" in tokens:
-            out["attention_mask"] = tokens["attention_mask"].to(device)
+            out["attention_mask"] = tokens["attention_mask"].to(target_device)
         return out
 
     else:  # llava
         prompt = cfg["prompt_template"].format(question=full_text)
         inputs = processor(text=prompt, images=image, return_tensors="pt")
-        return {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        return {k: v.to(target_device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -559,8 +607,8 @@ def extract_features_for_split(
             image = load_image_safely(img_id, d_id, image_size)
             blank = blank_canvas(image_size)
 
-            inputs = prepare_vlm_forward_inputs(model_name, processor, image, q_text, context=None, cfg=cfg, device=device)
-            blank_inputs = prepare_vlm_forward_inputs(model_name, processor, blank, q_text, context=None, cfg=cfg, device=device)
+            inputs = prepare_vlm_forward_inputs(model_name, processor, image, q_text, context=None, cfg=cfg, device=device, model=model)
+            blank_inputs = prepare_vlm_forward_inputs(model_name, processor, blank, q_text, context=None, cfg=cfg, device=device, model=model)
 
             with torch.no_grad():
                 # --- Primary forward pass (image-conditioned) ---
@@ -636,7 +684,7 @@ def extract_features_for_split(
 
                 # CSR: forward pass WITH retrieved context
                 ctx_inputs = prepare_vlm_forward_inputs(
-                    model_name, processor, image, q_text, context=retrieved_context, cfg=cfg, device=device
+                    model_name, processor, image, q_text, context=retrieved_context, cfg=cfg, device=device, model=model
                 )
                 with torch.no_grad():
                     ctx_outputs = model(**ctx_inputs)
