@@ -133,6 +133,8 @@ def main():
 
     if len(train_vecs) == 0:
         raise RuntimeError("Zero training vectors — cannot train combiner. Run feature extraction first.")
+    if len(val_vecs) == 0:
+        raise RuntimeError("Zero validation vectors — cannot train combiner. Run feature extraction first.")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"\nDevice: {device}")

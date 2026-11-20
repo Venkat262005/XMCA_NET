@@ -320,13 +320,14 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     dev_train = features_dir / f"genuine_features_{model_name}_dev_train.parquet"
     dev_val = features_dir / f"genuine_features_{model_name}_dev_val.parquet"
     test = features_dir / f"genuine_features_{model_name}_test.parquet"
+    all_feat_path = features_dir / f"genuine_features_{model_name}_all.parquet"
     
     features_ready = check_feature_parquets_valid(features_dir, model_name)
     
     # Step 1: GPU Feature Extraction (if parquets missing, corrupt, or forced)
     if not features_ready or not skip_extraction_if_present:
         # Purge any corrupt remnants for this model
-        for p in [dev_train, dev_val, test]:
+        for p in [dev_train, dev_val, test, all_feat_path]:
             if p.exists():
                 try:
                     p.unlink()
@@ -358,12 +359,11 @@ def execute_vlm_pipeline(model_name: str, skip_extraction_if_present: bool = Tru
     # Step 7: Multi-Level Component & Architecture Ablation
     print(f"\\n[Step 6/6] Executing 19-config multi-level ablation on GPU for {model_name}...")
     all_feat_path = features_dir / f"genuine_features_{model_name}_all.parquet"
-    if not all_feat_path.exists():
-        p_train = pd.read_parquet(dev_train)
-        p_val = pd.read_parquet(dev_val)
-        p_test = pd.read_parquet(test)
-        combined = pd.concat([p_train, p_val, p_test], ignore_index=True)
-        combined.to_parquet(all_feat_path, index=False)
+    p_train = pd.read_parquet(dev_train)
+    p_val = pd.read_parquet(dev_val)
+    p_test = pd.read_parquet(test)
+    combined = pd.concat([p_train, p_val, p_test], ignore_index=True)
+    combined.to_parquet(all_feat_path, index=False)
     subprocess.run([sys.executable, "scripts/run_component_ablation.py", "--features_file", str(all_feat_path), "--model", model_name, "--tier", "1000", "--epochs", "40"], check=True)
     
     # Explicit GPU memory cleanup between model executions

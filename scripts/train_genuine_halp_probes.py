@@ -100,12 +100,21 @@ def main():
             print(f"[Warn] Dropping {err_rows} training rows with extraction errors.")
         train_df = train_df[train_df["extraction_error"].isna()].reset_index(drop=True)
     if "extraction_error" in val_df.columns:
+        err_rows_val = val_df["extraction_error"].notna().sum()
+        if err_rows_val > 0:
+            print(f"[Warn] Dropping {err_rows_val} validation rows with extraction errors.")
         val_df = val_df[val_df["extraction_error"].isna()].reset_index(drop=True)
 
     # Verify ground truth labels are present and binary
     if len(train_df) == 0:
         raise ValueError(
             f"No valid training samples remaining for '{model_name}' after dropping extraction errors! "
+            f"Feature parquets appear to be from an earlier failed extraction run. "
+            f"Please re-run feature extraction: python scripts/run_genuine_gpu_feature_extraction.py --model {model_name}"
+        )
+    if len(val_df) == 0:
+        raise ValueError(
+            f"No valid validation samples remaining for '{model_name}' after dropping extraction errors! "
             f"Feature parquets appear to be from an earlier failed extraction run. "
             f"Please re-run feature extraction: python scripts/run_genuine_gpu_feature_extraction.py --model {model_name}"
         )

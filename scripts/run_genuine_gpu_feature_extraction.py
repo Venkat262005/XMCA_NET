@@ -347,7 +347,9 @@ def prepare_vlm_forward_inputs(
     target_device = device
     if model is not None:
         try:
-            target_device = getattr(model, "device", None) or next(model.parameters()).device
+            first_device = next(model.parameters()).device
+            # For multi-GPU device_map="auto", use the first parameter device for input tensors
+            target_device = str(first_device)
         except Exception:
             target_device = device
 
@@ -612,19 +614,27 @@ def extract_features_for_split(
 
             with torch.no_grad():
                 # --- Primary forward pass (image-conditioned) ---
-                outputs = model(**inputs, output_hidden_states=True)
+                # For InternVL2 we do NOT pass output_hidden_states because
+                # the custom forward in modeling_internvl_chat.py may not support it.
+                # We obtain logits (which is always returned) and fall back to
+                # entropy-based coverage computation instead of attention weights.
+                _fwd_kwargs = dict(inputs)
+                if "internvl" not in model_name:
+                    _fwd_kwargs["output_hidden_states"] = True
+                outputs = model(**_fwd_kwargs)
                 img_logits = outputs.logits[0, -1].float()  # [vocab_size]
                 img_probs = torch.softmax(img_logits, dim=-1).cpu().numpy()
 
-                # Attention weights for coverage (if available)
+                # Attention weights for coverage (only for non-InternVL models)
                 attn_weights = None
                 if hasattr(outputs, "attentions") and outputs.attentions is not None:
-                    # Mean attention across heads in last layer
                     last_attn = outputs.attentions[-1].float()  # [B, heads, seq, seq]
                     attn_weights = last_attn[0].cpu().numpy()  # [heads, seq, seq]
 
                 # --- Blank-canvas prior forward pass ---
-                blank_outputs = model(**blank_inputs)
+                _blank_kwargs = dict(blank_inputs)
+                # Remove output_hidden_states from blank pass — not needed
+                blank_outputs = model(**_blank_kwargs)
                 blank_logits = blank_outputs.logits[0, -1].float()
                 blank_probs = torch.softmax(blank_logits, dim=-1).cpu().numpy()
 
